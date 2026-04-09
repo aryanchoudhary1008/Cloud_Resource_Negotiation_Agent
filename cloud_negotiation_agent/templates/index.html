@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cloud Resource Negotiation Agent</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+
+  <!-- ── Top Navigation Bar ──────────────────────────────────────── -->
+  <header class="navbar">
+    <div class="navbar-brand">
+      <span class="brand-icon">&#9729;</span>
+      <span>Cloud Negotiation Agent</span>
+    </div>
+    <nav class="navbar-links">
+      <a href="#negotiate-section" onclick="showSection('negotiate')">Negotiate</a>
+      <a href="#history-section"   onclick="showSection('history')">History</a>
+      <a href="#stats-section"     onclick="showSection('stats')">Stats</a>
+      <a href="#train-section"     onclick="showSection('train')">Training</a>
+    </nav>
+  </header>
+
+  <!-- ── Hero Banner ─────────────────────────────────────────────── -->
+  <div class="hero">
+    <h1>Cloud Resource Negotiation</h1>
+    <p>Reinforcement Learning agent negotiates cloud pricing on your behalf</p>
+    <div class="hero-badges">
+      <span class="badge">Q-Learning</span>
+      <span class="badge">Flask REST API</span>
+      <span class="badge">SQLite</span>
+      <span class="badge">Epsilon-Greedy</span>
+    </div>
+  </div>
+
+  <!-- ── Main Container ──────────────────────────────────────────── -->
+  <main class="container">
+
+    <!-- ══════════════════════════════════════════════════════════════
+         SECTION 1 — NEGOTIATE
+    ══════════════════════════════════════════════════════════════ -->
+    <section id="negotiate-section" class="section active">
+
+      <div class="two-col">
+
+        <!-- Left: Input Form -->
+        <div class="card">
+          <div class="card-header">
+            <h2>&#9881; Configure Resources</h2>
+            <p class="card-subtitle">Set requirements and let the RL agent negotiate the best price</p>
+          </div>
+
+          <form id="negotiate-form" onsubmit="handleNegotiate(event)">
+
+            <div class="form-group">
+              <label for="cpu">CPU Cores</label>
+              <select id="cpu" name="cpu" required>
+                <option value="2">2 Cores — Light workload</option>
+                <option value="4" selected>4 Cores — Standard</option>
+                <option value="8">8 Cores — High performance</option>
+                <option value="16">16 Cores — Enterprise</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="ram">RAM</label>
+              <select id="ram" name="ram" required>
+                <option value="4">4 GB — Minimal</option>
+                <option value="8" selected>8 GB — Standard</option>
+                <option value="16">16 GB — High memory</option>
+                <option value="32">32 GB — Enterprise</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="storage">Storage (GB)</label>
+              <input type="number" id="storage" name="storage"
+                     value="100" min="10" max="2000" required />
+            </div>
+
+            <div class="form-group">
+              <label for="budget">Budget (USD $)</label>
+              <input type="number" id="budget" name="budget"
+                     value="40" min="1" step="0.01" required />
+            </div>
+
+            <!-- Training mode toggle -->
+            <div class="form-group toggle-row">
+              <label for="training-toggle" class="toggle-label">
+                Live Training Mode
+                <span class="tooltip" title="When ON, the Q-table updates in real time during this negotiation">?</span>
+              </label>
+              <label class="switch">
+                <input type="checkbox" id="training-toggle" />
+                <span class="slider"></span>
+              </label>
+            </div>
+
+            <!-- Provider price preview -->
+            <div class="price-preview" id="price-preview">
+              <span class="preview-label">Estimated base price:</span>
+              <span class="preview-value" id="base-price-display">$--</span>
+            </div>
+
+            <button type="submit" class="btn btn-primary" id="negotiate-btn">
+              <span id="btn-text">&#9654; Start Negotiation</span>
+              <span id="btn-spinner" class="spinner hidden"></span>
+            </button>
+
+          </form>
+        </div>
+
+        <!-- Right: Result Panel -->
+        <div class="card" id="result-card">
+          <div class="card-header">
+            <h2>&#128203; Negotiation Result</h2>
+            <p class="card-subtitle">Round-by-round negotiation log</p>
+          </div>
+
+          <!-- Empty state -->
+          <div id="result-empty" class="empty-state">
+            <div class="empty-icon">&#129302;</div>
+            <p>Run a negotiation to see results here.</p>
+          </div>
+
+          <!-- Result content (hidden until negotiation runs) -->
+          <div id="result-content" class="hidden">
+
+            <!-- Outcome badge -->
+            <div id="outcome-badge" class="outcome-badge"></div>
+
+            <!-- Key metrics grid -->
+            <div class="metrics-grid">
+              <div class="metric-item">
+                <span class="metric-label">Final Price</span>
+                <span class="metric-value" id="r-price">—</span>
+              </div>
+              <div class="metric-item">
+                <span class="metric-label">Budget</span>
+                <span class="metric-value" id="r-budget">—</span>
+              </div>
+              <div class="metric-item">
+                <span class="metric-label">Rounds Used</span>
+                <span class="metric-value" id="r-rounds">—</span>
+              </div>
+              <div class="metric-item">
+                <span class="metric-label">RL Reward</span>
+                <span class="metric-value" id="r-reward">—</span>
+              </div>
+              <div class="metric-item">
+                <span class="metric-label">Final CPU</span>
+                <span class="metric-value" id="r-cpu">—</span>
+              </div>
+              <div class="metric-item">
+                <span class="metric-label">Final RAM</span>
+                <span class="metric-value" id="r-ram">—</span>
+              </div>
+            </div>
+
+            <!-- Savings indicator -->
+            <div id="savings-bar" class="savings-bar hidden">
+              <span class="savings-label">Savings vs Budget</span>
+              <div class="savings-track">
+                <div class="savings-fill" id="savings-fill"></div>
+              </div>
+              <span class="savings-amount" id="savings-amount"></span>
+            </div>
+
+            <!-- Round-by-round log -->
+            <div class="log-header">Negotiation Log</div>
+            <div class="log-container" id="negotiation-log"></div>
+
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+
+    <!-- ══════════════════════════════════════════════════════════════
+         SECTION 2 — HISTORY
+    ══════════════════════════════════════════════════════════════ -->
+    <section id="history-section" class="section hidden">
+      <div class="card">
+        <div class="card-header">
+          <h2>&#128202; Negotiation History</h2>
+          <p class="card-subtitle">All past sessions stored in SQLite, newest first</p>
+          <button class="btn btn-outline" onclick="loadHistory()">&#8635; Refresh</button>
+        </div>
+
+        <div id="history-empty" class="empty-state hidden">
+          <div class="empty-icon">&#128203;</div>
+          <p>No sessions recorded yet. Run a negotiation first!</p>
+        </div>
+
+        <div class="table-wrapper">
+          <table id="history-table" class="data-table hidden">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Status</th>
+                <th>CPU</th>
+                <th>RAM</th>
+                <th>Storage</th>
+                <th>Budget</th>
+                <th>Final Price</th>
+                <th>Rounds</th>
+                <th>Reward</th>
+                <th>Time</th>
+              </tr>
+            </thead>
+            <tbody id="history-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+
+    <!-- ══════════════════════════════════════════════════════════════
+         SECTION 3 — STATS
+    ══════════════════════════════════════════════════════════════ -->
+    <section id="stats-section" class="section hidden">
+      <div class="card">
+        <div class="card-header">
+          <h2>&#128200; Performance Statistics</h2>
+          <p class="card-subtitle">Aggregate metrics across all negotiation sessions</p>
+          <button class="btn btn-outline" onclick="loadStats()">&#8635; Refresh</button>
+        </div>
+
+        <div id="stats-empty" class="empty-state hidden">
+          <div class="empty-icon">&#128202;</div>
+          <p>No data yet. Run some negotiations first!</p>
+        </div>
+
+        <div id="stats-content" class="hidden">
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div class="stat-icon">&#9989;</div>
+              <div class="stat-value" id="s-success-rate">—</div>
+              <div class="stat-label">Success Rate</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon">&#128260;</div>
+              <div class="stat-value" id="s-total">—</div>
+              <div class="stat-label">Total Sessions</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon">&#127937;</div>
+              <div class="stat-value" id="s-avg-rounds">—</div>
+              <div class="stat-label">Avg Rounds</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon">&#128181;</div>
+              <div class="stat-value" id="s-cost-eff">—</div>
+              <div class="stat-label">Avg Cost Efficiency</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon">&#128736;</div>
+              <div class="stat-value" id="s-res-sat">—</div>
+              <div class="stat-label">Resource Satisfaction</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon">&#10060;</div>
+              <div class="stat-value" id="s-failed">—</div>
+              <div class="stat-label">Failed Sessions</div>
+            </div>
+          </div>
+
+          <!-- Graph section -->
+          <div class="graph-section">
+            <div class="graph-header">
+              <span>Performance Graphs</span>
+              <button class="btn btn-outline btn-sm" onclick="loadGraph()">&#128200; Load Graph</button>
+            </div>
+            <div id="graph-container" class="graph-container">
+              <div class="empty-state">
+                <div class="empty-icon">&#128200;</div>
+                <p>Click "Load Graph" to generate charts</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+
+    <!-- ══════════════════════════════════════════════════════════════
+         SECTION 4 — TRAINING
+    ══════════════════════════════════════════════════════════════ -->
+    <section id="train-section" class="section hidden">
+      <div class="two-col">
+
+        <!-- Left: Training Controls -->
+        <div class="card">
+          <div class="card-header">
+            <h2>&#129504; Train the RL Agent</h2>
+            <p class="card-subtitle">
+              Run episodes with random scenarios to teach the Q-learning agent optimal negotiation strategies
+            </p>
+          </div>
+
+          <div class="form-group">
+            <label for="train-episodes">Number of Episodes</label>
+            <input type="range" id="train-episodes" name="episodes"
+                   min="100" max="2000" step="100" value="500"
+                   oninput="document.getElementById('ep-display').textContent = this.value" />
+            <div class="range-display">
+              <span>100</span>
+              <span id="ep-display" class="range-value">500</span>
+              <span>2000</span>
+            </div>
+          </div>
+
+          <!-- RL Algorithm explanation -->
+          <div class="algo-info">
+            <h3>How Q-Learning Works</h3>
+            <div class="algo-step">
+              <span class="algo-num">1</span>
+              <span>Agent observes state: (CPU, RAM, budget, price, round)</span>
+            </div>
+            <div class="algo-step">
+              <span class="algo-num">2</span>
+              <span>Picks action via ε-greedy: explore or exploit</span>
+            </div>
+            <div class="algo-step">
+              <span class="algo-num">3</span>
+              <span>Receives reward: +10 success / -10 fail / -1 per round</span>
+            </div>
+            <div class="algo-step">
+              <span class="algo-num">4</span>
+              <span>Updates: Q(s,a) ← Q(s,a) + α[r + γ·maxQ(s') − Q(s,a)]</span>
+            </div>
+            <div class="algo-step">
+              <span class="algo-num">5</span>
+              <span>Epsilon decays over time → more exploitation</span>
+            </div>
+          </div>
+
+          <button class="btn btn-primary" id="train-btn" onclick="handleTrain()">
+            <span id="train-btn-text">&#9654; Start Training</span>
+            <span id="train-spinner" class="spinner hidden"></span>
+          </button>
+        </div>
+
+        <!-- Right: Training Results -->
+        <div class="card">
+          <div class="card-header">
+            <h2>&#128202; Training Results</h2>
+            <p class="card-subtitle">Metrics from the last training run</p>
+          </div>
+
+          <div id="train-empty" class="empty-state">
+            <div class="empty-icon">&#129504;</div>
+            <p>Training results will appear here after you run training.</p>
+          </div>
+
+          <div id="train-results" class="hidden">
+            <div class="stats-grid">
+              <div class="stat-card">
+                <div class="stat-icon">&#128257;</div>
+                <div class="stat-value" id="t-episodes">—</div>
+                <div class="stat-label">Episodes Trained</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-icon">&#9989;</div>
+                <div class="stat-value" id="t-success">—</div>
+                <div class="stat-label">Success Rate</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-icon">&#127381;</div>
+                <div class="stat-value" id="t-reward">—</div>
+                <div class="stat-label">Avg Reward</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-icon">&#128200;</div>
+                <div class="stat-value" id="t-states">—</div>
+                <div class="stat-label">States Learned</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-icon">&#127922;</div>
+                <div class="stat-value" id="t-epsilon">—</div>
+                <div class="stat-label">Current Epsilon</div>
+              </div>
+            </div>
+
+            <div class="train-success-msg" id="train-success-msg">
+              &#10003; Q-table saved to <code>q_table.pkl</code> and reloaded into the agent.
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ── Footer ──────────────────────────────────────────────────── -->
+  <footer class="footer">
+    <p>
+      Cloud Resource Negotiation Agent &mdash; B.Tech CS Project &mdash;
+      Built with Flask &bull; Q-Learning &bull; SQLite
+    </p>
+  </footer>
+
+  <script src="/static/script.js"></script>
+
+</body>
+</html>
