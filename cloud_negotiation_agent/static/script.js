@@ -1,3 +1,18 @@
+
+// Theme Toggle Logic
+function toggleTheme() {
+    document.body.classList.toggle('light-mode');
+    const isLight = document.body.classList.contains('light-mode');
+    localStorage.setItem('theme', isLight ? 'light' : 'dark');
+}
+
+// Load Theme on Startup
+document.addEventListener('DOMContentLoaded', () => {
+    if (localStorage.getItem('theme') === 'light') {
+        document.body.classList.add('light-mode');
+    }
+});
+
 /**
  * script.js — Cloud Resource Negotiation Agent Frontend
  *
@@ -49,29 +64,65 @@ function showSection(name) {
 
 // ── Live Price Preview ─────────────────────────────────────────────
 
+let CONFIG = null;   // filled from GET /api/providers
+
 /**
- * Compute and display an estimated base price as the user changes
- * the form inputs. Uses the same formula as the backend:
- *   base = cpu*2.5 + ram*1.5 + storage*0.1
+ * Load providers / tiers / algorithm availability from the backend.
  */
-function updatePricePreview() {
-  const cpu     = parseFloat(document.getElementById("cpu").value)     || 0;
-  const ram     = parseFloat(document.getElementById("ram").value)     || 0;
-  const storage = parseFloat(document.getElementById("storage").value) || 0;
-
-  const estimate = (cpu * 2.5) + (ram * 1.5) + (storage * 0.1);
-
-  document.getElementById("base-price-display").textContent =
-    `$${estimate.toFixed(2)}`;
+async function loadConfig() {
+  try {
+    const res = await fetch("/api/providers");
+    CONFIG = await res.json();
+  } catch (err) {
+    console.error("[Config] Error:", err);
+  }
+  updatePricePreview();
+  updateAlgoWarning();
 }
 
-// Wire up live preview to form inputs
+/**
+ * Show the list (on-demand) monthly price for the selected provider,
+ * tier and quantity — same formula as the backend (hourly x 730 x qty).
+ */
+function updatePricePreview() {
+  const out = document.getElementById("base-price-display");
+  if (!CONFIG) { out.textContent = "$--"; return; }
+
+  const provider = document.getElementById("provider").value;
+  const tier     = document.getElementById("tier").value;
+  const qty      = parseInt(document.getElementById("quantity").value) || 0;
+  const fmt = v => `$${v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const listFor = name => CONFIG.providers[name].pricing[tier].on_demand * CONFIG.hours_per_month * qty;
+
+  if (provider === "auto") {                       // show the range across providers
+    const prices = Object.keys(CONFIG.providers).map(listFor);
+    out.textContent = `${fmt(Math.min(...prices))} – ${fmt(Math.max(...prices))}`;
+  } else {
+    out.textContent = fmt(listFor(provider));
+  }
+}
+
+/** Warn when the chosen algorithm is unavailable or untrained. */
+function updateAlgoWarning() {
+  const box  = document.getElementById("algo-warning");
+  const algo = document.getElementById("algorithm").value;
+  if (!CONFIG) return;
+  const info = CONFIG.algorithms[algo];
+  let msg = "";
+  if (!info.available)            msg = algo === "dqn" ? "DQN needs PyTorch: pip install torch" : "Agent unavailable.";
+  else if (info.trained_episodes === 0) msg = "Not trained yet — run python train.py or use the Training tab.";
+  box.textContent = msg;
+  box.classList.toggle("hidden", !msg);
+}
+
 document.addEventListener("DOMContentLoaded", () => {
-  ["cpu", "ram", "storage", "budget"].forEach(id => {
+  ["provider", "tier", "quantity"].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.addEventListener("change", updatePricePreview);
   });
-  updatePricePreview();  // initial render
+  document.getElementById("algorithm").addEventListener("change", updateAlgoWarning);
+  updateAlgoInfo();
+  loadConfig();
 });
 
 // ── Negotiation ────────────────────────────────────────────────────
@@ -90,10 +141,11 @@ async function handleNegotiate(event) {
 
   // Build request body from form values
   const payload = {
-    cpu:           parseInt(document.getElementById("cpu").value),
-    ram:           parseInt(document.getElementById("ram").value),
-    storage:       parseInt(document.getElementById("storage").value),
+    provider:      document.getElementById("provider").value,
+    tier:          document.getElementById("tier").value,
+    quantity:      parseInt(document.getElementById("quantity").value),
     budget:        parseFloat(document.getElementById("budget").value),
+    algorithm:     document.getElementById("algorithm").value,
     training_mode: document.getElementById("training-toggle").checked,
   };
 
@@ -116,6 +168,7 @@ async function handleNegotiate(event) {
     }
 
     renderResult(data);
+    loadConfig();   // refresh trained-episode info
 
   } catch (err) {
     alert(`Negotiation failed: ${err.message}`);
@@ -142,33 +195,38 @@ function renderResult(data) {
   const badge = document.getElementById("outcome-badge");
   if (data.success) {
     badge.className = "outcome-badge success";
-    badge.textContent = `✓ Deal Reached in ${data.rounds} Round${data.rounds !== 1 ? "s" : ""}`;
+    badge.textContent = data.auto
+      ? `★ Agent selected ${data.provider} — deal in ${data.rounds} Round${data.rounds !== 1 ? "s" : ""}`
+      : `✓ Deal Reached in ${data.rounds} Round${data.rounds !== 1 ? "s" : ""}`;
   } else {
     badge.className = "outcome-badge failure";
-    badge.textContent = `✗ Negotiation Failed after ${data.rounds} Round${data.rounds !== 1 ? "s" : ""}`;
+    badge.textContent = data.auto
+      ? "✗ No provider could close a deal within your budget"
+      : `✗ Negotiation Failed after ${data.rounds} Round${data.rounds !== 1 ? "s" : ""}`;
   }
 
+  renderQuotes(data);
+
   // ── Metrics ─────────────────────────────────────────────────────
-  document.getElementById("r-price").textContent  =
-    data.success ? `$${data.final_price.toFixed(2)}` : "—";
-  document.getElementById("r-budget").textContent  = `$${data.budget.toFixed(2)}`;
-  document.getElementById("r-rounds").textContent  = `${data.rounds} / 5`;
-  document.getElementById("r-reward").textContent  = data.total_reward.toFixed(1);
-  document.getElementById("r-cpu").textContent     = `${data.final_cpu} cores`;
-  document.getElementById("r-ram").textContent     = `${data.final_ram} GB`;
+  const money = v => `$${v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const algoName = data.algorithm === "dqn" ? "DQN" : "Q-Learning";
 
-  // ── Savings bar (only for successful deals) ──────────────────────
+  document.getElementById("r-price").textContent  = data.success ? money(data.final_price) : "—";
+  document.getElementById("r-budget").textContent = money(data.budget);
+  document.getElementById("r-rounds").textContent = `${data.rounds} / ${data.max_rounds}`;
+  document.getElementById("r-reward").textContent = data.total_reward.toFixed(1);
+  document.getElementById("r-cpu").textContent    =
+    `${data.quantity} × ${data.tier} (${data.final_cpu} vCPU / ${data.final_ram} GB)`;
+  document.getElementById("r-ram").textContent    = `${data.provider} · ${algoName}`;
+
+  // ── Savings bar (vs list price) ──────────────────────────────────
   const savingsBar = document.getElementById("savings-bar");
-  if (data.success && data.final_price > 0) {
-    const saved   = data.budget - data.final_price;
-    const pct     = Math.max(0, Math.min((saved / data.budget) * 100, 100));
-
-    document.getElementById("savings-fill").style.width    = `${pct}%`;
-    document.getElementById("savings-amount").textContent  =
-      saved >= 0
-        ? `Saved $${saved.toFixed(2)} (${pct.toFixed(0)}% under budget)`
-        : `Over budget by $${Math.abs(saved).toFixed(2)}`;
-
+  if (data.success && data.list_price > 0) {
+    const saved = data.list_price - data.final_price;
+    const pct   = Math.max(0, Math.min((saved / data.list_price) * 100, 100));
+    document.getElementById("savings-fill").style.width   = `${pct}%`;
+    document.getElementById("savings-amount").textContent =
+      `Saved ${money(saved)} (${pct.toFixed(0)}% below list price ${money(data.list_price)})`;
     savingsBar.classList.remove("hidden");
   } else {
     savingsBar.classList.add("hidden");
@@ -176,6 +234,37 @@ function renderResult(data) {
 
   // ── Log ─────────────────────────────────────────────────────────
   renderLog(data.log || []);
+  if (data.warning) alert(data.warning);
+}
+
+let LAST_QUOTES = [];
+
+/**
+ * Auto mode: table with every provider's outcome; winner is starred.
+ */
+function renderQuotes(data) {
+  const section = document.getElementById("quotes-section");
+  if (!data.auto || !data.quotes) { section.classList.add("hidden"); LAST_QUOTES = []; return; }
+
+  LAST_QUOTES = data.quotes;
+  const money = v => `$${v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  document.getElementById("quotes-table").innerHTML =
+    `<thead><tr><th></th><th>Provider</th><th>Result</th><th>Tier</th><th>Final price</th><th>vs list</th><th>Rounds</th></tr></thead><tbody>` +
+    data.quotes.map((q, i) => `
+      <tr style="cursor:pointer" onclick="showQuoteLog(${i})">
+        <td>${q.selected ? "★" : ""}</td>
+        <td><strong>${q.provider}</strong></td>
+        <td>${q.success ? "✓ Deal" : "✗ Failed"}</td>
+        <td>${q.quantity} × ${q.tier}${q.downgrades ? ` (from ${q.requested_tier})` : ""}</td>
+        <td>${q.success ? money(q.final_price) : "—"}</td>
+        <td>${q.success && q.savings_pct !== null ? q.savings_pct + "%" : "—"}</td>
+        <td>${q.rounds} / ${q.max_rounds}</td>
+      </tr>`).join("") + "</tbody>";
+  section.classList.remove("hidden");
+}
+
+function showQuoteLog(i) {
+  if (LAST_QUOTES[i]) renderLog(LAST_QUOTES[i].log || []);
 }
 
 /**
@@ -197,9 +286,9 @@ function renderLog(log) {
       div.classList.add("round-header");
     } else if (/^Round \d+: Agent action/i.test(line) || /User Agent action/i.test(line)) {
       div.classList.add("action");
-    } else if (/Deal reached|accepted/i.test(line)) {
+    } else if (/Deal closed|accepted/i.test(line)) {
       div.classList.add("success");
-    } else if (/failed|rejected|maximum rounds/i.test(line)) {
+    } else if (/failed|rejected|patience|No deal|exceeds/i.test(line)) {
       div.classList.add("failure");
     } else {
       div.classList.add("detail");
@@ -223,7 +312,8 @@ async function handleTrain() {
   const btn      = document.getElementById("train-btn");
   const btnText  = document.getElementById("train-btn-text");
   const spinner  = document.getElementById("train-spinner");
-  const episodes = parseInt(document.getElementById("train-episodes").value);
+  const episodes  = parseInt(document.getElementById("train-episodes").value);
+  const algorithm = document.getElementById("train-algorithm").value;
 
   // Show loading
   btn.disabled          = true;
@@ -234,7 +324,7 @@ async function handleTrain() {
     const response = await fetch("/api/train", {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ episodes }),
+      body:    JSON.stringify({ episodes, algorithm }),
     });
 
     const data = await response.json();
@@ -250,7 +340,12 @@ async function handleTrain() {
     document.getElementById("t-episodes").textContent = data.episodes_trained.toLocaleString();
     document.getElementById("t-success").textContent  = `${data.success_rate}%`;
     document.getElementById("t-reward").textContent   = data.avg_reward.toFixed(3);
-    document.getElementById("t-states").textContent   = data.total_states_learned.toLocaleString();
+    document.getElementById("t-states").textContent   = data.knowledge_size.toLocaleString();
+    document.getElementById("t-states-label").textContent = data.knowledge_label;
+    document.getElementById("t-saved-msg").textContent =
+      `${algorithm === "dqn" ? "DQN model saved to dqn_model.pt" : "Q-table saved to q_table.pkl"} ` +
+      `(${data.total_episodes.toLocaleString()} total episodes, ${data.seconds}s) and reloaded.`;
+    loadConfig();
     document.getElementById("t-epsilon").textContent  = data.current_epsilon.toFixed(4);
 
   } catch (err) {
@@ -263,6 +358,29 @@ async function handleTrain() {
   }
 }
 
+const ALGO_INFO = {
+  qlearning: ["How Q-Learning Works", [
+    "Observe a discretised state: (provider, tier, price, budget, gap, patience)",
+    "Pick an action via ε-greedy: explore or exploit",
+    "Receive reward: savings vs list price + bonus, −5 on failure, −0.3 per round",
+    "Update the table: Q(s,a) ← Q(s,a) + α[r + γ·maxQ(s') − Q(s,a)]",
+    "Epsilon decays over time → more exploitation"]],
+  dqn: ["How the DQN Works", [
+    "Observe a continuous state vector (provider one-hot, tier, price ratios, patience…)",
+    "A neural network estimates Q-values for all 4 actions",
+    "Store each transition in the experience replay buffer",
+    "Train on random mini-batches against a slowly-updated target network",
+    "Epsilon decays over time → more exploitation"]],
+};
+
+function updateAlgoInfo() {
+  const algo = document.getElementById("train-algorithm").value;
+  const [title, steps] = ALGO_INFO[algo];
+  document.getElementById("algo-title").textContent = title;
+  document.getElementById("algo-steps").innerHTML = steps.map((t, i) =>
+    `<div class="algo-step"><span class="algo-num">${i + 1}</span><span>${t}</span></div>`).join("");
+}
+
 // ── History ────────────────────────────────────────────────────────
 
 /**
@@ -273,7 +391,7 @@ async function loadHistory() {
   const table   = document.getElementById("history-table");
   const empty   = document.getElementById("history-empty");
 
-  tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; color:var(--text-muted); padding:2rem;">Loading…</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="11" style="text-align:center; color:var(--text-muted); padding:2rem;">Loading…</td></tr>';
   table.classList.remove("hidden");
   empty.classList.add("hidden");
 
@@ -301,9 +419,10 @@ async function loadHistory() {
         <tr>
           <td>${s.id}</td>
           <td>${status}</td>
-          <td>${s.final_cpu} cores</td>
-          <td>${s.final_ram} GB</td>
-          <td>${s.storage} GB</td>
+          <td>${s.provider}${s.auto_mode && s.selected ? " ★" : ""}</td>
+          <td>${s.provider === "Legacy" ? "—" : s.auto_mode ? (s.selected ? "Auto (chosen)" : "Auto (quote)") : "Manual"}</td>
+          <td>${s.algorithm === "dqn" ? "DQN" : "Q-Learning"}</td>
+          <td>${s.provider === "Legacy" ? `${s.final_cpu} cores / ${s.final_ram} GB` : `${s.quantity} × ${s.tier}`}</td>
           <td>$${s.budget.toFixed(2)}</td>
           <td>${price}</td>
           <td>${s.rounds}</td>
@@ -314,7 +433,7 @@ async function loadHistory() {
     }).join("");
 
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="10" style="text-align:center; color:var(--accent-red); padding:1rem;">${err.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="11" style="text-align:center; color:var(--accent-red); padding:1rem;">${err.message}</td></tr>`;
     console.error("[History] Error:", err);
   }
 }
@@ -349,6 +468,15 @@ async function loadStats() {
     document.getElementById("s-cost-eff").textContent     = `$${data.avg_cost_efficiency.toFixed(2)}`;
     document.getElementById("s-res-sat").textContent      = `${data.resource_satisfaction}%`;
     document.getElementById("s-failed").textContent       = data.failed;
+
+    const table = (id, rows, label) => {
+      document.getElementById(id).innerHTML =
+        `<thead><tr><th>${label}</th><th>Sessions</th><th>Success rate</th><th>Avg rounds</th><th>Avg savings vs list</th><th>Chosen by agent</th></tr></thead><tbody>` +
+        rows.map(r => `<tr><td>${r.name === "dqn" ? "DQN" : r.name === "qlearning" ? "Q-Learning" : r.name}</td><td>${r.total}</td>` +
+          `<td>${r.success_rate}%</td><td>${r.avg_rounds}</td><td>${r.avg_savings_pct}%</td><td>${r.auto_wins}</td></tr>`).join("") + "</tbody>";
+    };
+    table("by-provider-table", data.by_provider, "Provider");
+    table("by-algo-table", data.by_algorithm, "Algorithm");
 
   } catch (err) {
     console.error("[Stats] Error:", err);

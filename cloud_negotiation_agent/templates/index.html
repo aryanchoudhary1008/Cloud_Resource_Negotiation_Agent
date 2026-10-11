@@ -1,37 +1,44 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Cloud Resource Negotiation Agent</title>
   <link rel="stylesheet" href="/static/style.css" />
 </head>
+
 <body>
 
   <!-- ── Top Navigation Bar ──────────────────────────────────────── -->
   <header class="navbar">
     <div class="navbar-brand">
       <span class="brand-icon">&#9729;</span>
-      <span>Cloud Negotiation Agent</span>
+      <span>Cloud Resource Negotiation Agent</span>
     </div>
     <nav class="navbar-links">
       <a href="#negotiate-section" onclick="showSection('negotiate')">Negotiate</a>
-      <a href="#history-section"   onclick="showSection('history')">History</a>
-      <a href="#stats-section"     onclick="showSection('stats')">Stats</a>
-      <a href="#train-section"     onclick="showSection('train')">Training</a>
+      <a href="#history-section" onclick="showSection('history')">History</a>
+      <a href="#stats-section" onclick="showSection('stats')">Stats</a>
+      <a href="#train-section" onclick="showSection('train')">Training</a>
+
+      <button id="theme-toggle" class="theme-btn" onclick="toggleTheme()" title="Toggle Light/Dark Mode">&#9788;
+        Theme</button>
     </nav>
   </header>
 
   <!-- ── Hero Banner ─────────────────────────────────────────────── -->
   <div class="hero">
-    <h1>Cloud Resource Negotiation</h1>
+    <h1>Cloud Resource Negotiation Agent</h1>
     <p>Reinforcement Learning agent negotiates cloud pricing on your behalf</p>
-    <div class="hero-badges">
+    <!-- <div class="hero-badges">
       <span class="badge">Q-Learning</span>
+      <span class="badge">DQN</span>
+      <span class="badge">AWS · GCP · Azure</span>
       <span class="badge">Flask REST API</span>
       <span class="badge">SQLite</span>
       <span class="badge">Epsilon-Greedy</span>
-    </div>
+    </div> -->
   </div>
 
   <!-- ── Main Container ──────────────────────────────────────────── -->
@@ -54,42 +61,49 @@
           <form id="negotiate-form" onsubmit="handleNegotiate(event)">
 
             <div class="form-group">
-              <label for="cpu">CPU Cores</label>
-              <select id="cpu" name="cpu" required>
-                <option value="2">2 Cores — Light workload</option>
-                <option value="4" selected>4 Cores — Standard</option>
-                <option value="8">8 Cores — High performance</option>
-                <option value="16">16 Cores — Enterprise</option>
+              <label for="provider">Cloud Provider</label>
+              <select id="provider" name="provider" required>
+                <option value="auto" selected>★ Auto — agent picks the best provider</option>
+                <option value="AWS">AWS — slow concessions, high patience</option>
+                <option value="GCP">GCP — moderate</option>
+                <option value="Azure">Azure — aggressive concessions, low patience</option>
               </select>
             </div>
 
             <div class="form-group">
-              <label for="ram">RAM</label>
-              <select id="ram" name="ram" required>
-                <option value="4">4 GB — Minimal</option>
-                <option value="8" selected>8 GB — Standard</option>
-                <option value="16">16 GB — High memory</option>
-                <option value="32">32 GB — Enterprise</option>
+              <label for="tier">Instance Tier</label>
+              <select id="tier" name="tier" required>
+                <option value="Small">Small — 2 vCPU / 4 GB</option>
+                <option value="Medium" selected>Medium — 2 vCPU / 8 GB</option>
+                <option value="Large">Large — 4 vCPU / 16 GB</option>
               </select>
             </div>
 
             <div class="form-group">
-              <label for="storage">Storage (GB)</label>
-              <input type="number" id="storage" name="storage"
-                     value="100" min="10" max="2000" required />
+              <label for="quantity">Quantity (instances)</label>
+              <input type="number" id="quantity" name="quantity" value="10" min="1" max="10000" required />
             </div>
 
             <div class="form-group">
-              <label for="budget">Budget (USD $)</label>
-              <input type="number" id="budget" name="budget"
-                     value="40" min="1" step="0.01" required />
+              <label for="budget">Monthly Budget (USD $)</label>
+              <input type="number" id="budget" name="budget" value="600" min="1" step="0.01" required />
+            </div>
+
+            <div class="form-group">
+              <label for="algorithm">RL Algorithm</label>
+              <select id="algorithm" name="algorithm">
+                <option value="qlearning">Q-Learning (tabular)</option>
+                <option value="dqn">Deep Q-Network (DQN)</option>
+              </select>
+              <div id="algo-warning" class="card-subtitle hidden" style="margin-top:.4rem"></div>
             </div>
 
             <!-- Training mode toggle -->
             <div class="form-group toggle-row">
               <label for="training-toggle" class="toggle-label">
                 Live Training Mode
-                <span class="tooltip" title="When ON, the Q-table updates in real time during this negotiation">?</span>
+                <span class="tooltip"
+                  title="When ON, the selected agent keeps learning in real time during this negotiation">?</span>
               </label>
               <label class="switch">
                 <input type="checkbox" id="training-toggle" />
@@ -99,7 +113,7 @@
 
             <!-- Provider price preview -->
             <div class="price-preview" id="price-preview">
-              <span class="preview-label">Estimated base price:</span>
+              <span class="preview-label">List price (on-demand, per month):</span>
               <span class="preview-value" id="base-price-display">$--</span>
             </div>
 
@@ -130,10 +144,18 @@
             <!-- Outcome badge -->
             <div id="outcome-badge" class="outcome-badge"></div>
 
+            <!-- Provider quotes (Auto mode only) -->
+            <div id="quotes-section" class="hidden" style="margin-bottom:1.25rem">
+              <div class="graph-header"><span>Provider Quotes — click a row to see its negotiation log</span></div>
+              <div class="table-wrapper">
+                <table class="data-table" id="quotes-table"></table>
+              </div>
+            </div>
+
             <!-- Key metrics grid -->
             <div class="metrics-grid">
               <div class="metric-item">
-                <span class="metric-label">Final Price</span>
+                <span class="metric-label">Final Price / month</span>
                 <span class="metric-value" id="r-price">—</span>
               </div>
               <div class="metric-item">
@@ -149,18 +171,18 @@
                 <span class="metric-value" id="r-reward">—</span>
               </div>
               <div class="metric-item">
-                <span class="metric-label">Final CPU</span>
+                <span class="metric-label">Final Tier</span>
                 <span class="metric-value" id="r-cpu">—</span>
               </div>
               <div class="metric-item">
-                <span class="metric-label">Final RAM</span>
+                <span class="metric-label">Provider · Algorithm</span>
                 <span class="metric-value" id="r-ram">—</span>
               </div>
             </div>
 
             <!-- Savings indicator -->
             <div id="savings-bar" class="savings-bar hidden">
-              <span class="savings-label">Savings vs Budget</span>
+              <span class="savings-label">Savings vs List Price</span>
               <div class="savings-track">
                 <div class="savings-fill" id="savings-fill"></div>
               </div>
@@ -200,9 +222,10 @@
               <tr>
                 <th>#</th>
                 <th>Status</th>
-                <th>CPU</th>
-                <th>RAM</th>
-                <th>Storage</th>
+                <th>Provider</th>
+                <th>Mode</th>
+                <th>Algorithm</th>
+                <th>Config</th>
                 <th>Budget</th>
                 <th>Final Price</th>
                 <th>Rounds</th>
@@ -267,6 +290,19 @@
             </div>
           </div>
 
+          <div class="graph-section">
+            <div class="graph-header"><span>Success by Provider</span></div>
+            <div class="table-wrapper">
+              <table class="data-table" id="by-provider-table"></table>
+            </div>
+          </div>
+          <div class="graph-section">
+            <div class="graph-header"><span>Success by Algorithm</span></div>
+            <div class="table-wrapper">
+              <table class="data-table" id="by-algo-table"></table>
+            </div>
+          </div>
+
           <!-- Graph section -->
           <div class="graph-section">
             <div class="graph-header">
@@ -296,15 +332,22 @@
           <div class="card-header">
             <h2>&#129504; Train the RL Agent</h2>
             <p class="card-subtitle">
-              Run episodes with random scenarios to teach the Q-learning agent optimal negotiation strategies
+              Run episodes on random provider / tier / budget scenarios to teach the agent negotiation strategies
             </p>
           </div>
 
           <div class="form-group">
+            <label for="train-algorithm">Algorithm</label>
+            <select id="train-algorithm" onchange="updateAlgoInfo()">
+              <option value="qlearning">Q-Learning (tabular)</option>
+              <option value="dqn">Deep Q-Network (DQN)</option>
+            </select>
+          </div>
+
+          <div class="form-group">
             <label for="train-episodes">Number of Episodes</label>
-            <input type="range" id="train-episodes" name="episodes"
-                   min="100" max="2000" step="100" value="500"
-                   oninput="document.getElementById('ep-display').textContent = this.value" />
+            <input type="range" id="train-episodes" name="episodes" min="100" max="2000" step="100" value="500"
+              oninput="document.getElementById('ep-display').textContent = this.value" />
             <div class="range-display">
               <span>100</span>
               <span id="ep-display" class="range-value">500</span>
@@ -314,27 +357,8 @@
 
           <!-- RL Algorithm explanation -->
           <div class="algo-info">
-            <h3>How Q-Learning Works</h3>
-            <div class="algo-step">
-              <span class="algo-num">1</span>
-              <span>Agent observes state: (CPU, RAM, budget, price, round)</span>
-            </div>
-            <div class="algo-step">
-              <span class="algo-num">2</span>
-              <span>Picks action via ε-greedy: explore or exploit</span>
-            </div>
-            <div class="algo-step">
-              <span class="algo-num">3</span>
-              <span>Receives reward: +10 success / -10 fail / -1 per round</span>
-            </div>
-            <div class="algo-step">
-              <span class="algo-num">4</span>
-              <span>Updates: Q(s,a) ← Q(s,a) + α[r + γ·maxQ(s') − Q(s,a)]</span>
-            </div>
-            <div class="algo-step">
-              <span class="algo-num">5</span>
-              <span>Epsilon decays over time → more exploitation</span>
-            </div>
+            <h3 id="algo-title">How Q-Learning Works</h3>
+            <div id="algo-steps"></div>
           </div>
 
           <button class="btn btn-primary" id="train-btn" onclick="handleTrain()">
@@ -375,7 +399,7 @@
               <div class="stat-card">
                 <div class="stat-icon">&#128200;</div>
                 <div class="stat-value" id="t-states">—</div>
-                <div class="stat-label">States Learned</div>
+                <div class="stat-label" id="t-states-label">States Learned</div>
               </div>
               <div class="stat-card">
                 <div class="stat-icon">&#127922;</div>
@@ -385,7 +409,7 @@
             </div>
 
             <div class="train-success-msg" id="train-success-msg">
-              &#10003; Q-table saved to <code>q_table.pkl</code> and reloaded into the agent.
+              &#10003; <span id="t-saved-msg">Model saved and reloaded into the agent.</span>
             </div>
           </div>
 
@@ -399,11 +423,12 @@
   <footer class="footer">
     <p>
       Cloud Resource Negotiation Agent &mdash; B.Tech CS Project &mdash;
-      Built with Flask &bull; Q-Learning &bull; SQLite
+      Built with Flask &bull; Q-Learning &bull; DQN &bull; SQLite
     </p>
   </footer>
 
   <script src="/static/script.js"></script>
 
 </body>
+
 </html>

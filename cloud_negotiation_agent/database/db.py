@@ -1,57 +1,48 @@
 """
 database/db.py
 --------------
-SQLite database helpers for persisting negotiation sessions.
-
-Uses Python's built-in `sqlite3` module — no external database
-library needed. The database file is created automatically on
-first run at `negotiation_history.db` in the project root.
+SQLite persistence for negotiation sessions.
 
 Table: negotiations
-    id           INTEGER PRIMARY KEY AUTOINCREMENT
-    cpu          INTEGER  — cores requested
-    ram          INTEGER  — GB requested
-    storage      INTEGER  — GB requested
-    budget       REAL     — user's max budget (USD)
-    final_price  REAL     — agreed price (0 if no deal)
-    final_cpu    INTEGER  — CPU in final deal
-    final_ram    INTEGER  — RAM in final deal
-    rounds       INTEGER  — number of rounds
-    success      INTEGER  — 0 (fail) or 1 (success); SQLite has no bool
-    total_reward REAL     — RL reward earned this episode
-    timestamp    TEXT     — ISO-8601 UTC string
+    id, cpu, ram, storage, budget, final_price, final_cpu, final_ram,
+    rounds, success, total_reward, timestamp           (original columns)
+    provider, algorithm, tier, quantity, list_price    (added in Phase 1)
+    request_id, auto_mode, selected                    (Auto provider selection:
+        one Auto request stores one row per provider, sharing a request_id;
+        the winner has selected=1)
+
+MIGRATION
+    init_db() upgrades an existing database in place with ALTER TABLE, so
+    old negotiation_history.db files keep working. Old rows get
+    provider='Legacy', algorithm='qlearning', tier='Custom'.
 """
 
 import os
 import sqlite3
+from config import DB_PATH
 from models.negotiation import NegotiationSession
 
-# Path to the SQLite database file (relative to wherever app.py is run)
-DB_PATH = "negotiation_history.db"
+# Columns added after the original schema: name → SQL definition
+NEW_COLUMNS = {
+    "provider":   "TEXT    NOT NULL DEFAULT 'Legacy'",
+    "algorithm":  "TEXT    NOT NULL DEFAULT 'qlearning'",
+    "tier":       "TEXT    NOT NULL DEFAULT 'Custom'",
+    "quantity":   "INTEGER NOT NULL DEFAULT 1",
+    "list_price": "REAL    NOT NULL DEFAULT 0.0",
+    "request_id": "TEXT    NOT NULL DEFAULT ''",
+    "auto_mode":  "INTEGER NOT NULL DEFAULT 0",
+    "selected":   "INTEGER NOT NULL DEFAULT 1",
+}
 
 
 def get_connection():
-    """
-    Open and return a SQLite connection.
-
-    Sets row_factory to sqlite3.Row so columns can be accessed
-    by name (row["cpu"]) instead of just by index (row[1]).
-
-    Returns:
-        sqlite3.Connection
-    """
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
 
 def init_db():
-    """
-    Create the negotiations table if it doesn't already exist.
-
-    Safe to call on every app startup — the IF NOT EXISTS clause
-    ensures existing data is never wiped.
-    """
+    """Create the table if needed and add any missing Phase-1 columns."""
     conn   = get_connection()
     cursor = conn.cursor()
 
@@ -72,43 +63,37 @@ def init_db():
         )
     """)
 
+    existing = {row["name"] for row in cursor.execute("PRAGMA table_info(negotiations)")}
+    for name, definition in NEW_COLUMNS.items():
+        if name not in existing:
+            cursor.execute(f"ALTER TABLE negotiations ADD COLUMN {name} {definition}")
+            print(f"[DB] Migrated: added column '{name}'")
+
     conn.commit()
     conn.close()
     print(f"[DB] Initialized: {os.path.abspath(DB_PATH)}")
 
 
 def save_session(session: NegotiationSession) -> int:
-    """
-    Insert a completed negotiation session into the database.
-
-    Args:
-        session (NegotiationSession): The session to persist.
-
-    Returns:
-        int: The auto-assigned primary key (id) of the new row.
-    """
+    """Insert a session and return its new id."""
     conn   = get_connection()
     cursor = conn.cursor()
-
     cursor.execute("""
         INSERT INTO negotiations
             (cpu, ram, storage, budget, final_price, final_cpu, final_ram,
-             rounds, success, total_reward, timestamp)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             rounds, success, total_reward, timestamp,
+             provider, algorithm, tier, quantity, list_price,
+             request_id, auto_mode, selected)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
-        session.cpu,
-        session.ram,
-        session.storage,
-        session.budget,
-        session.final_price,
-        session.final_cpu,
-        session.final_ram,
-        session.rounds,
-        int(session.success),   # store Python bool as 0 / 1
-        session.total_reward,
+        session.cpu, session.ram, session.storage, session.budget,
+        session.final_price, session.final_cpu, session.final_ram,
+        session.rounds, int(session.success), session.total_reward,
         session.timestamp,
+        session.provider, session.algorithm, session.tier,
+        session.quantity, session.list_price,
+        session.request_id, int(session.auto_mode), int(session.selected),
     ))
-
     inserted_id = cursor.lastrowid
     conn.commit()
     conn.close()
@@ -116,101 +101,92 @@ def save_session(session: NegotiationSession) -> int:
 
 
 def get_all_sessions() -> list:
-    """
-    Retrieve every negotiation session, newest first.
-
-    Returns:
-        list[NegotiationSession]: All recorded sessions.
-    """
-    conn   = get_connection()
-    cursor = conn.cursor()
-
-    cursor.execute("SELECT * FROM negotiations ORDER BY id DESC")
-    rows = cursor.fetchall()
+    """All sessions, newest first."""
+    conn = get_connection()
+    rows = conn.execute("SELECT * FROM negotiations ORDER BY id DESC").fetchall()
     conn.close()
 
-    sessions = []
-    for row in rows:
-        session = NegotiationSession(
-            id           = row["id"],
-            cpu          = row["cpu"],
-            ram          = row["ram"],
-            storage      = row["storage"],
-            budget       = row["budget"],
-            final_price  = row["final_price"],
-            final_cpu    = row["final_cpu"],
-            final_ram    = row["final_ram"],
-            rounds       = row["rounds"],
-            success      = bool(row["success"]),
-            total_reward = row["total_reward"],
-            timestamp    = row["timestamp"],
+    return [
+        NegotiationSession(
+            id=row["id"], cpu=row["cpu"], ram=row["ram"], storage=row["storage"],
+            budget=row["budget"], final_price=row["final_price"],
+            final_cpu=row["final_cpu"], final_ram=row["final_ram"],
+            rounds=row["rounds"], success=bool(row["success"]),
+            total_reward=row["total_reward"], timestamp=row["timestamp"],
+            provider=row["provider"], algorithm=row["algorithm"],
+            tier=row["tier"], quantity=row["quantity"], list_price=row["list_price"],
+            request_id=row["request_id"], auto_mode=bool(row["auto_mode"]),
+            selected=bool(row["selected"]),
         )
-        sessions.append(session)
+        for row in rows
+    ]
 
-    return sessions
+
+def _breakdown(cursor, column):
+    """Success statistics grouped by `column` ('provider' or 'algorithm')."""
+    cursor.execute(f"""
+        SELECT {column}                                   AS name,
+               COUNT(*)                                   AS total,
+               SUM(success)                               AS successes,
+               AVG(rounds)                                AS avg_rounds,
+               SUM(CASE WHEN auto_mode = 1 AND selected = 1 THEN 1 ELSE 0 END) AS auto_wins,
+               AVG(CASE WHEN success = 1 AND list_price > 0
+                        THEN (list_price - final_price) * 100.0 / list_price END) AS avg_savings
+        FROM negotiations
+        GROUP BY {column}
+        ORDER BY {column}
+    """)
+    return [
+        {
+            "name":            r["name"],
+            "total":           r["total"],
+            "successes":       r["successes"] or 0,
+            "success_rate":    round((r["successes"] or 0) / r["total"] * 100, 1),
+            "avg_rounds":      round(r["avg_rounds"] or 0.0, 2),
+            "avg_savings_pct": round(r["avg_savings"] or 0.0, 1),
+            "auto_wins":       r["auto_wins"] or 0,
+        }
+        for r in cursor.fetchall()
+    ]
 
 
 def get_stats() -> dict:
     """
-    Compute aggregate statistics across all recorded sessions.
+    Aggregate statistics.
 
-    Metrics:
-        total_sessions        — total rows in the table
-        successful            — rows where success = 1
-        failed                — rows where success = 0
-        success_rate          — successful / total × 100  (%)
-        avg_rounds            — mean number of rounds per session
-        avg_cost_efficiency   — mean (budget - final_price) for successes
-                                (positive = under budget, negative = over)
-        resource_satisfaction — % of sessions where final_cpu == cpu
-                                AND final_ram == ram (no downgrade occurred)
-
-    Returns:
-        dict: All metrics with float values rounded to 2 d.p.
-              Returns all-zero dict if no sessions exist yet.
+    Original keys: total_sessions, successful, failed, success_rate,
+    avg_rounds, avg_cost_efficiency, resource_satisfaction.
+    New keys     : by_provider, by_algorithm  (lists of per-group stats).
     """
     conn   = get_connection()
     cursor = conn.cursor()
 
-    # Total sessions
     cursor.execute("SELECT COUNT(*) FROM negotiations")
     total = cursor.fetchone()[0]
 
     if total == 0:
         conn.close()
         return {
-            "total_sessions":        0,
-            "successful":            0,
-            "failed":                0,
-            "success_rate":          0.0,
-            "avg_rounds":            0.0,
-            "avg_cost_efficiency":   0.0,
-            "resource_satisfaction": 0.0,
+            "total_sessions": 0, "successful": 0, "failed": 0,
+            "success_rate": 0.0, "avg_rounds": 0.0,
+            "avg_cost_efficiency": 0.0, "resource_satisfaction": 0.0,
+            "by_provider": [], "by_algorithm": [],
         }
 
-    # Successful sessions
     cursor.execute("SELECT COUNT(*) FROM negotiations WHERE success = 1")
     successful = cursor.fetchone()[0]
 
-    # Average rounds across all sessions
     cursor.execute("SELECT AVG(rounds) FROM negotiations")
     avg_rounds = cursor.fetchone()[0] or 0.0
 
-    # Cost efficiency: how far under budget the user landed (successes only)
-    cursor.execute("""
-        SELECT AVG(budget - final_price)
-        FROM negotiations
-        WHERE success = 1
-    """)
+    cursor.execute("SELECT AVG(budget - final_price) FROM negotiations WHERE success = 1")
     avg_cost_eff = cursor.fetchone()[0] or 0.0
 
-    # Resource satisfaction: no downgrade occurred
-    cursor.execute("""
-        SELECT COUNT(*) FROM negotiations
-        WHERE final_cpu = cpu AND final_ram = ram
-    """)
-    full_resource_count = cursor.fetchone()[0]
+    cursor.execute("SELECT COUNT(*) FROM negotiations WHERE final_cpu = cpu AND final_ram = ram")
+    full_resource = cursor.fetchone()[0]
 
+    by_provider  = _breakdown(cursor, "provider")
+    by_algorithm = _breakdown(cursor, "algorithm")
     conn.close()
 
     return {
@@ -220,5 +196,7 @@ def get_stats() -> dict:
         "success_rate":          round(successful / total * 100, 1),
         "avg_rounds":            round(avg_rounds, 2),
         "avg_cost_efficiency":   round(avg_cost_eff, 2),
-        "resource_satisfaction": round(full_resource_count / total * 100, 1),
+        "resource_satisfaction": round(full_resource / total * 100, 1),
+        "by_provider":           by_provider,
+        "by_algorithm":          by_algorithm,
     }

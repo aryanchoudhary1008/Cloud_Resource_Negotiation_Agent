@@ -1,0 +1,72 @@
+{
+  "_meta": {
+    "source": "Multi_Provider_Cloud_Data_Report.md (September 2026 snapshot), with the GCP rows corrected",
+    "currency": "USD",
+    "price_unit": "per instance per HOUR; the simulator converts to a monthly total",
+    "hours_per_month": 730,
+    "verify": "Cloud prices change often. Re-check every value on the official pricing pages before quoting it in the final report. Values for GCP Small/Medium/Large on-demand and GCP spot were corrected from the report (see README, 'Data corrections')."
+  },
+
+  "tiers": {
+    "Small":  { "vcpu": 2, "ram_gb": 4,  "examples": "t3.medium / e2-medium / B2s" },
+    "Medium": { "vcpu": 2, "ram_gb": 8,  "examples": "m5.large / e2-standard-2 / D2s v5" },
+    "Large":  { "vcpu": 4, "ram_gb": 16, "examples": "m5.xlarge / n2-standard-4 / D4s v5" }
+  },
+
+  "providers": {
+    "AWS": {
+      "full_name": "Amazon Web Services",
+      "region": "us-east-1",
+      "pricing": {
+        "Small":  { "on_demand": 0.0416, "reserved_1yr": 0.0250, "reserved_3yr": 0.0170, "spot": 0.0152 },
+        "Medium": { "on_demand": 0.0960, "reserved_1yr": 0.0600, "reserved_3yr": 0.0379, "spot": 0.0290 },
+        "Large":  { "on_demand": 0.1920, "reserved_1yr": 0.1200, "reserved_3yr": 0.0758, "spot": 0.0580 }
+      },
+      "price_floor_ratio": 0.78,
+      "concession_rate": 0.03,
+      "max_rounds": 9,
+      "max_rounds_range": [8, 10],
+      "accept_margin": 0.02,
+      "volume_discount_tiers": [[100, 0.05], [500, 0.10]],
+      "style": "Slow / stubborn"
+    },
+
+    "GCP": {
+      "full_name": "Google Cloud Platform",
+      "region": "us-central1",
+      "pricing": {
+        "Small":  { "on_demand": 0.0335, "reserved_1yr": 0.0211, "reserved_3yr": 0.0151, "spot": 0.0101 },
+        "Medium": { "on_demand": 0.0670, "reserved_1yr": 0.0422, "reserved_3yr": 0.0301, "spot": 0.0201 },
+        "Large":  { "on_demand": 0.1942, "reserved_1yr": 0.1224, "reserved_3yr": 0.0874, "spot": 0.0543 }
+      },
+      "price_floor_ratio": 0.60,
+      "concession_rate": 0.065,
+      "max_rounds": 6,
+      "max_rounds_range": [5, 7],
+      "accept_margin": 0.04,
+      "sustained_use_discount_max": 0.30,
+      "volume_discount_tiers": [[10, 0.10], [50, 0.20], [100, 0.30]],
+      "volume_discount_note": "SIMULATION ASSUMPTION: GCP's automatic Sustained-Use Discount (max 30%) is modelled as a quantity-based tier table.",
+      "style": "Moderate"
+    },
+
+    "Azure": {
+      "full_name": "Microsoft Azure",
+      "region": "East US",
+      "pricing": {
+        "Small":  { "on_demand": 0.0416, "reserved_1yr": 0.0270, "reserved_3yr": 0.0180, "spot": 0.0125 },
+        "Medium": { "on_demand": 0.0960, "reserved_1yr": 0.0580, "reserved_3yr": 0.0379, "spot": 0.0203 },
+        "Large":  { "on_demand": 0.1920, "reserved_1yr": 0.1160, "reserved_3yr": 0.0758, "spot": 0.0410 }
+      },
+      "price_floor_ratio": 0.55,
+      "concession_rate": 0.10,
+      "max_rounds": 5,
+      "max_rounds_range": [4, 6],
+      "accept_margin": 0.06,
+      "enterprise_agreement_discount_max": 0.35,
+      "volume_discount_tiers": [[50, 0.10], [200, 0.25], [500, 0.35]],
+      "volume_discount_note": "SIMULATION ASSUMPTION: Azure's negotiated Enterprise Agreement (max 35%) is modelled as a quantity-based tier table.",
+      "style": "Aggressive"
+    }
+  }
+}

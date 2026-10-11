@@ -1,116 +1,115 @@
 """
 rl/state_space.py
 -----------------
-State space encoding for the Q-learning agent.
+State encoding for BOTH learning agents.
 
-In Q-learning, the agent needs a DISCRETE, HASHABLE representation
-of the world to use as a dictionary key in the Q-table.
+The environment (rl/environment.py) produces an *observation dict*.
+Two encoders turn it into what each algorithm needs:
 
-Problem: cpu, ram, budget, price are continuous/large integers.
-Solution: Discretize them into small integer "bins".
+    encode_tabular(obs) → small hashable tuple   (Q-learning dictionary key)
+    encode_vector(obs)  → float32 numpy vector   (DQN neural-network input)
 
-Example:
-    cpu=7 cores → closest to bin [2,4,8,16] → bin index 2 (value 8)
-    budget=37   → closest to bin [10,20,50,100] → bin index 2 (value 50)
+Why two encoders?
+    A Q-table needs a coarse, discrete key; adding a provider one-hot there
+    would just blow up the table. A neural network instead takes a
+    continuous normalised vector and generalises across nearby states —
+    that generalisation is exactly what the DQN-vs-Q-learning comparison
+    is meant to show.
 
-Final state = (cpu_bin, ram_bin, budget_bin, price_bin, round_bin)
-            = e.g. (2, 1, 2, 3, 0)  → hashable tuple, usable as dict key
+Observation fields used (all produced by NegotiationEnv):
+    provider_idx, tier_idx, quantity, round, max_rounds, remaining,
+    offer_ratio  = provider's current offer / list price
+    bid_ratio    = user's current bid       / list price
+    budget_ratio = user's budget            / list price
+    gap          = (offer - bid) / offer, clipped to [0, 1]
 """
 
-# ── Discrete bins for each state dimension ─────────────────────────
+import math
+import numpy as np
 
-# CPU tier options (cores)
-CPU_BINS = [2, 4, 8, 16]
+from agents.provider_agent import provider_names, tier_names
 
-# RAM tier options (GB)
-RAM_BINS = [4, 8, 16, 32]
+PROVIDERS = provider_names()
+TIERS     = tier_names()
 
-# Budget tiers (USD) — rough breakpoints for low/medium/high/premium budgets
-BUDGET_BINS = [10, 20, 50, 100]
+# Bump this whenever the encoding OR the reward function changes (v3: downgrade shaping). Saved models carry the version
+# and are ignored if it does not match (old q_table.pkl files are stale).
+STATE_VERSION = 3
 
-# Number of price bins (price is normalized to [0,1] then mapped to 0..4)
-PRICE_BINS = 5
+# Dimension of the DQN input vector:
+#   provider one-hot + tier one-hot + 7 continuous features
+STATE_DIM = len(PROVIDERS) + len(TIERS) + 7
 
-
-def discretize(value, bins):
-    """
-    Map a continuous value to the index of the nearest bin.
-
-    Uses minimum absolute distance — no rounding needed.
-
-    Args:
-        value (float/int): The value to discretize.
-        bins  (list):      Sorted list of representative values.
-
-    Returns:
-        int: Index (0-based) of the nearest bin.
-
-    Examples:
-        discretize(3,  [2, 4, 8, 16]) → 1   (4 is closest to 3)
-        discretize(15, [2, 4, 8, 16]) → 3   (16 is closest to 15)
-        discretize(9,  [2, 4, 8, 16]) → 2   (8 is closest to 9)
-    """
-    return min(range(len(bins)), key=lambda i: abs(bins[i] - value))
+# Tabular bin edges
+BUDGET_EDGES = [0.55, 0.70, 0.85, 1.00]      # → 5 budget bins
+GAP_EDGES    = [0.03, 0.10, 0.20, 0.30]      # → 5 gap bins
+PRICE_BINS   = 6                              # offer_ratio 0.5..1.0+ in steps of 0.1
 
 
-def discretize_price(current_price, max_price):
-    """
-    Normalize current_price relative to max_price, then map to 5 bins.
+def _bin(value, edges):
+    """Index of the first edge that `value` does not exceed (len(edges) if above all)."""
+    for i, edge in enumerate(edges):
+        if value < edge:
+            return i
+    return len(edges)
 
-    Rationale: Absolute price values vary wildly between sessions
-    (e.g. $5 for 2 CPU vs $80 for 16 CPU). Normalizing keeps the
-    state space compact and generalizable.
 
-    Args:
-        current_price (float): The price being offered right now.
-        max_price     (float): Upper bound reference (usually base_price).
-
-    Returns:
-        int: Bin index 0..4 where 0 = very cheap, 4 = very expensive.
-    """
-    if max_price <= 0:
+def _patience_bin(remaining):
+    if remaining <= 0:
         return 0
-
-    # Clamp ratio to [0, 1] to handle prices that exceed max_price
-    ratio = min(current_price / max_price, 1.0)
-
-    # Map [0.0, 1.0] → [0, 4]
-    bin_idx = min(int(ratio * PRICE_BINS), PRICE_BINS - 1)
-    return bin_idx
+    if remaining <= 2:
+        return 1
+    if remaining <= 4:
+        return 2
+    return 3
 
 
-def encode_state(cpu, ram, budget, current_price, round_num, max_price=None):
+def encode_tabular(obs):
     """
-    Encode the full negotiation state into a compact, hashable tuple.
-
-    This tuple serves as the KEY in the Q-table dictionary:
-        q_table[(2, 1, 2, 3, 0)] → np.array([q0, q1, q2, q3])
-
-    Args:
-        cpu           (int):   CPU cores currently being negotiated.
-        ram           (int):   RAM in GB currently being negotiated.
-        budget        (float): User's stated maximum budget.
-        current_price (float): Provider's current offered price.
-        round_num     (int):   Negotiation round number (1–5).
-        max_price     (float): Reference max price for normalization.
-                               Defaults to 2× budget if not provided.
+    Encode an observation as a hashable tuple for the Q-table.
 
     Returns:
-        tuple: (cpu_bin, ram_bin, budget_bin, price_bin, round_bin)
-               All elements are small integers → fully hashable.
+        (provider, tier, price_bin, budget_bin, gap_bin, patience_bin)
+        3 x 3 x 6 x 5 x 5 x 4 = 5,400 possible states.
     """
-    # Discretize each dimension
-    cpu_bin    = discretize(cpu,    CPU_BINS)
-    ram_bin    = discretize(ram,    RAM_BINS)
-    budget_bin = discretize(budget, BUDGET_BINS)
+    price_bin = int(np.clip((obs["offer_ratio"] - 0.5) / 0.1, 0, PRICE_BINS - 1))
+    return (
+        obs["provider_idx"],
+        obs["tier_idx"],
+        price_bin,
+        _bin(obs["budget_ratio"], BUDGET_EDGES),
+        _bin(obs["gap"], GAP_EDGES),
+        _patience_bin(obs["remaining"]),
+    )
 
-    # Use budget × 2 as a rough max_price if not explicitly provided
-    if max_price is None or max_price <= 0:
-        max_price = budget * 2.0
 
-    price_bin = discretize_price(current_price, max_price)
+def encode_vector(obs):
+    """
+    Encode an observation as a normalised float32 vector for the DQN.
 
-    # Clamp round to valid range [0, 4]
-    round_bin = max(0, min(round_num - 1, 4))
+    Layout (STATE_DIM entries):
+        [0 : P]        provider one-hot
+        [P : P+T]      tier one-hot
+        qty            log10(quantity) / 3            (1 → 0.0, 1000 → 1.0)
+        round_frac     round / max_rounds
+        remaining      remaining patience / 10
+        offer_ratio    provider offer / list price
+        bid_ratio      user bid / list price
+        budget_ratio   budget / list price, clipped to 1.5 then / 1.5
+        gap            (offer - bid) / offer
+    """
+    vec = np.zeros(STATE_DIM, dtype=np.float32)
+    p, t = len(PROVIDERS), len(TIERS)
 
-    return (cpu_bin, ram_bin, budget_bin, price_bin, round_bin)
+    vec[obs["provider_idx"]]     = 1.0
+    vec[p + obs["tier_idx"]]     = 1.0
+
+    base = p + t
+    vec[base + 0] = min(math.log10(max(obs["quantity"], 1)) / 3.0, 1.0)
+    vec[base + 1] = obs["round"] / max(obs["max_rounds"], 1)
+    vec[base + 2] = min(obs["remaining"] / 10.0, 1.0)
+    vec[base + 3] = obs["offer_ratio"]
+    vec[base + 4] = obs["bid_ratio"]
+    vec[base + 5] = min(obs["budget_ratio"], 1.5) / 1.5
+    vec[base + 6] = obs["gap"]
+    return vec

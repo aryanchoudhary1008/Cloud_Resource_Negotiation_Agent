@@ -1,272 +1,109 @@
 # Cloud Resource Negotiation Agent using Reinforcement Learning
 
-A B.Tech CS project that demonstrates a **Q-learning** agent negotiating
-cloud resource prices against a rule-based provider agent, with a
-Flask web interface and SQLite persistence.
+A B.Tech CS project in which a **reinforcement-learning customer agent**
+negotiates cloud pricing with rule-based **AWS, GCP and Azure** provider
+simulations. Two learners are implemented and benchmarked against each other:
+**tabular Q-learning** and a **Deep Q-Network (DQN)**.
 
----
-
-## Project Description
-
-Cloud providers (AWS, GCP, Azure) offer dynamic pricing for compute
-resources. This project simulates a **multi-round price negotiation**
-between:
-
-- **User Agent (RL):** Uses Q-learning to learn optimal negotiation
-  strategies — when to push for a lower price, when to accept, and
-  when to reduce resource requirements to fit the budget.
-
-- **Provider Agent (Rule-based):** Simulates a cloud provider with a
-  fixed pricing model that reduces prices 5% per round to close deals.
-
-The Q-learning agent improves over many training episodes by exploring
-different actions and learning which choices maximize the reward.
-
----
-
-## Architecture Diagram
+## Architecture
 
 ```
-  Browser (HTML/CSS/JS)
-       |  Fetch API calls
-       v
-  Flask REST API  (app.py)
-       |
-       +---> UserAgent (RL)
-       |          |
-       |          +---> QLearningAgent
-       |          |         |-- Q-table (q_table.pkl)
-       |          |         |-- encode_state() → state tuple
-       |          |         |-- choose_action() → epsilon-greedy
-       |          |         \-- update() → Bellman equation
-       |          |
-       |          \---> ProviderAgent (Rule-based)
-       |                    |-- calculate_base_price()
-       |                    |-- make_offer()  (5% discount/round)
-       |                    \-- evaluate_user_offer()  (60% floor)
-       |
-       +---> SQLite DB  (negotiation_history.db)
-                 \-- NegotiationSession records
+Browser (HTML/CSS/JS)
+      │ fetch
+      ▼
+Flask API (app.py) ───────────────► SQLite history (database/db.py)
+      │                               provider · algorithm · tier · qty
+      ▼
+UserAgent (agents/user_agent.py)
+  ├─ learner: QLearningAgent  (rl/q_learning.py)   ← encode_tabular()
+  │           DQNAgent        (rl/dqn_agent.py)    ← encode_vector()
+  └─ NegotiationEnv (rl/environment.py)  rules + rewards
+            └─ ProviderAgent (agents/provider_agent.py) ← providers.json
 ```
 
----
+**Auto provider selection.** Leave the provider on *Auto* and the agent negotiates
+with AWS, GCP and Azure using the same requirements, then keeps the best deal:
+a closed deal beats a failed one → fewer tier downgrades → lower price → fewer rounds.
+The UI shows every provider's quote with the winner starred; all three negotiations
+are saved in history under one `request_id`. Pick AWS/GCP/Azure explicitly to force a
+single provider (used for the per-provider comparison).
 
-## Project Structure
+**Workflow of one negotiation:** the env opens with the provider's list price →
+each round the agent observes the state, picks one of 4 actions
+(raise bid · downgrade tier · accept · walk away) → the env applies it, returns a
+reward → the provider concedes a little or the deal closes / patience runs out.
+
+## Project structure
 
 ```
 cloud_negotiation_agent/
-├── app.py                   Flask app + all API routes
-├── train.py                 Standalone Q-table pre-training script
+├── app.py              Flask app + API
+├── train.py            Train + benchmark Q-learning vs DQN
+├── config.py           All file paths (one DB, one model, no duplicates)
+├── providers.json      Pricing + negotiation personality for AWS / GCP / Azure
 ├── requirements.txt
-├── README.md
-├── q_table.pkl              (generated after training)
-├── negotiation_history.db   (generated at runtime)
-│
-├── agents/
-│   ├── __init__.py
-│   ├── user_agent.py        RL-based negotiator (uses Q-learning)
-│   └── provider_agent.py    Rule-based cloud provider
-│
-├── rl/
-│   ├── __init__.py
-│   ├── q_learning.py        QLearningAgent class (core RL logic)
-│   └── state_space.py       State encoding / discretization
-│
-├── models/
-│   ├── __init__.py
-│   └── negotiation.py       NegotiationSession dataclass
-│
-├── database/
-│   └── db.py                SQLite init, CRUD, stats
-│
-├── static/
-│   ├── style.css            Dark-theme CSS
-│   └── script.js            Frontend JS (Fetch API)
-│
-└── templates/
-    └── index.html           Single-page UI
+├── agents/             provider_agent.py · user_agent.py
+├── rl/                 environment.py · state_space.py · q_learning.py
+│                       dqn_agent.py · trainer.py
+├── models/ database/   session dataclass · SQLite (auto-migrating)
+├── static/ templates/  dashboard
+├── tests/              pytest suite
+└── results/            benchmark.json / .md / learning_curves.png (from train.py)
 ```
 
----
-
-## How to Run
-
-### 1. Install dependencies
+## Setup
 
 ```bash
 pip install -r requirements.txt
+python train.py              # trains both agents + writes results/
+python app.py                # http://127.0.0.1:5000
+python -m pytest tests -q    # run tests
 ```
+Q-learning works without PyTorch; DQN needs `torch`.
+`python train.py --algo dqn --episodes 5000 --seed 7` trains one algorithm.
+Old `q_table.pkl` files are detected as stale and ignored — just retrain.
 
-### 2. Pre-train the Q-agent (recommended)
+## Providers (`providers.json`)
 
-```bash
-python train.py
-```
+| | Concession / round | Patience | Price floor | Accept margin |
+|---|---|---|---|---|
+| AWS | 3 % (slow) | 8–10 rounds | 78 % of list | 2 % |
+| GCP | 6.5 % | 5–7 rounds | 60 % | 4 % |
+| Azure | 10 % (aggressive) | 4–6 rounds | 55 % | 6 % |
 
-This runs 1000 training episodes and saves `q_table.pkl`.
-You will see progress printed every 100 episodes:
+Tiers: **Small** 2 vCPU/4 GB · **Medium** 2/8 · **Large** 4/16. Prices are hourly
+per instance; the simulator uses `hourly × 730 × quantity` = USD per month.
+Volume discounts: AWS from the report; GCP (sustained-use) and Azure
+(enterprise agreement) are *modelled* as quantity tiers — a simulation assumption.
 
-```
-  Episode   Success%   Batch Avg Reward   Epsilon   States
-  ----------------------------------------------------------
-      100     45.0%             -2.150    0.2952      38
-      200     52.0%             -0.840    0.2735      62
-      ...
-     1000     78.0%             +5.200    0.0500      94
-```
+## RL design
 
-### 3. Start the web server
+**State.** Q-learning: 6-tuple `(provider, tier, price_bin, budget_bin, gap_bin,
+patience_bin)` → 5,400 states. DQN: 13-dim normalised vector (provider one-hot,
+tier one-hot, log-quantity, round fraction, remaining patience, offer/bid/budget
+ratios, offer–bid gap).
 
-```bash
-python app.py
-```
+**Reward.** −0.3 per round · on a deal: +5 + 10 × savings vs list + 2 × unused-patience
+fraction − 1.5 per downgrade · −5 on failure (walk-away, patience exhausted,
+accepting over budget) · −1 for bidding below the provider's floor · −3 extra for downgrading a tier that was still affordable. The price used
+in the reward is clipped at the provider's floor.
 
-### 4. Open the browser
+**DQN.** MLP 13→64→64→4, experience replay (20k), target network (hard sync every
+200 steps), Huber loss, Adam 1e-3, γ = 0.95, ε-greedy 0.5 → 0.05.
 
-```
-http://127.0.0.1:5000
-```
+## Results
 
----
+Evaluated greedily on 500 fixed unseen scenarios, after 3,000 training episodes
+(seed 42, 6,000 training episodes). Includes the Auto-selection benchmark. Re-run `python train.py` to reproduce; numbers are in `results/benchmark.md`.
+See the file for the current table — fill it into your report along with
+`results/learning_curves.png`.
 
-## API Reference
+## Data corrections (vs. the data report)
+GCP on-demand for Small ($0.1120 → $0.0335) and Large ($0.2280 → $0.1942),
+and GCP spot (Medium $0.0617 → $0.0201), were inconsistent with the report's own
+committed-use prices and were corrected. **Re-verify all prices against the official
+pricing pages before quoting them.**
 
-| Method | Endpoint         | Description                              |
-|--------|------------------|------------------------------------------|
-| GET    | `/`              | Serve the single-page UI                 |
-| POST   | `/api/negotiate` | Run a negotiation session                |
-| GET    | `/api/history`   | Return all past sessions (newest first)  |
-| GET    | `/api/stats`     | Return aggregate statistics              |
-| POST   | `/api/train`     | Run N training episodes (default: 500)   |
-| GET    | `/api/graph`     | Return charts as base64 PNG              |
-
-### POST /api/negotiate — Request body
-
-```json
-{
-  "cpu":           4,
-  "ram":           8,
-  "storage":       100,
-  "budget":        40.0,
-  "training_mode": false
-}
-```
-
-### POST /api/negotiate — Response
-
-```json
-{
-  "success":      true,
-  "rounds":       2,
-  "final_price":  27.20,
-  "final_cpu":    4,
-  "final_ram":    8,
-  "storage":      100,
-  "budget":       40.0,
-  "total_reward": 8.0,
-  "log": [
-    "Round 1: Provider offers $32.00 for 4 CPU, 8GB RAM, 100GB storage",
-    "Round 1: Agent action → Accept provider's offer",
-    "  Deal accepted at $32.00!"
-  ]
-}
-```
-
----
-
-## RL Algorithm Details
-
-### State Space (5 dimensions → tuple key)
-
-| Dimension       | Values                     | Bins |
-|-----------------|----------------------------|------|
-| cpu_bin         | [2, 4, 8, 16] cores        | 0-3  |
-| ram_bin         | [4, 8, 16, 32] GB          | 0-3  |
-| budget_bin      | [10, 20, 50, 100] USD      | 0-3  |
-| price_bin       | 0=cheap … 4=expensive      | 0-4  |
-| round_bin       | rounds 1-5 → 0-4           | 0-4  |
-
-Total distinct states: 4 × 4 × 4 × 5 × 5 = **1600**
-
-### Action Space (4 actions)
-
-| ID | Action                          | Reward effect         |
-|----|---------------------------------|-----------------------|
-| 0  | Increase offered price by 10%   | +10 if provider accepts|
-| 1  | Decrease resource tier (CPU/RAM)| -1 per round          |
-| 2  | Accept provider's current offer | +10 (within budget)   |
-| 3  | Reject — end negotiation        | -10                   |
-
-### Reward Function
-
-```
-+10  deal accepted AND final_price <= budget
- -5  deal accepted BUT final_price  > budget
--10  negotiation failed (rejected or max rounds reached)
- -1  per round (encourages faster resolution)
-```
-
-### Bellman Equation (Q-table update)
-
-```
-Q(s, a) ← Q(s, a) + α × [r + γ × max_a' Q(s', a') − Q(s, a)]
-
-Where:
-  α = 0.1   (learning rate)
-  γ = 0.9   (discount factor)
-  ε = 0.3   (initial exploration rate, decays to 0.05)
-```
-
-### Provider Pricing Formula
-
-```
-base_price = (cpu × $2.50) + (ram × $1.50) + (storage × $0.10)
-
-Round discounts:
-  Round 1: 0%  off  (full price)
-  Round 2: 5%  off
-  Round 3: 10% off
-  Round 4: 15% off  (final)
-  Round 5: 15% off  (same)
-
-Minimum acceptable user offer: 60% of base_price
-```
-
----
-
-## Demo Steps for Professors
-
-1. **Show the cold start:** Run `python app.py` without training first.
-   Make a negotiation with budget=$40, CPU=4, RAM=8.
-   Show that without training the agent sometimes rejects good deals.
-
-2. **Train the agent:** Click the "Training" tab in the UI → set 500
-   episodes → click Start Training. Watch states learned increase.
-
-3. **Show improvement:** Run the same negotiation again. The agent
-   should now consistently accept deals within budget in fewer rounds.
-
-4. **History tab:** Show the table of all sessions. Point out
-   `final_cpu` vs `cpu` column to demonstrate resource downgrade logic.
-
-5. **Stats tab:** Show success rate, avg rounds, cost efficiency.
-   Explain that cost efficiency = budget − final_price (bigger = better).
-
-6. **Graph tab:** Click "Load Graph" to show the reward improvement
-   curve and session outcome bar chart (requires matplotlib).
-
-7. **Explain the code:**
-   - `rl/q_learning.py` — the Bellman equation in `update()`
-   - `rl/state_space.py` — why discretization is needed
-   - `agents/user_agent.py` — the negotiation loop
-   - `database/db.py` — SQLite persistence
-
----
-
-## Requirements
-
-- Python 3.8+
-- flask
-- numpy
-- matplotlib (optional, for graphs)
-- sqlite3 (built-in, no install needed)
+## Future scope
+Curriculum learning (Easy→Expert; `reset(max_rounds=…)` is already the hook),
+mixed-provider multi-resource negotiations, Chart.js dashboard, Double/Dueling DQN.

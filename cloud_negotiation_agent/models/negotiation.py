@@ -1,49 +1,48 @@
 """
 models/negotiation.py
 ---------------------
-NegotiationSession data model.
+NegotiationSession data model — one row of negotiation history.
 
-A dataclass that represents one complete negotiation session.
-Used for:
-  - Storing results in SQLite (via database/db.py)
-  - Returning structured data from the Flask API
-  - Computing aggregate statistics
+New in this version: provider, algorithm, tier, quantity and list_price,
+so history and statistics can be compared across AWS / GCP / Azure and
+across Q-learning / DQN.
 
-Python dataclasses (introduced in Python 3.7) are like lightweight
-data containers — they auto-generate __init__, __repr__, etc.
+Backward compatibility: `storage` is kept (always 0 now — storage is no
+longer negotiated) so rows from the old schema still load.
 """
 
 from dataclasses import dataclass, field
-from datetime    import datetime
+from datetime    import datetime, timezone
 from typing      import Optional
+
+
+def _utc_now():
+    return datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
 
 
 @dataclass
 class NegotiationSession:
     """
-    Complete record of a single cloud resource negotiation.venv\Scripts\activatevenv\Scripts\activate
-
-    Fields marked 'Optional' or with defaults are not required
-    at construction time — they get filled in after the fact
-    (e.g. `id` is assigned by SQLite on INSERT).
-
     Attributes:
-        cpu          (int):   CPU cores originally requested by the user.
-        ram          (int):   RAM in GB originally requested.
-        storage      (int):   Storage in GB requested.
-        budget       (float): User's stated maximum budget (USD).
-        final_price  (float): Agreed price; 0.0 if negotiation failed.
-        final_cpu    (int):   CPU cores in the final deal (may be < cpu
-                              if the agent downgraded resources).
-        final_ram    (int):   RAM in final deal (may be < ram).
-        rounds       (int):   Number of negotiation rounds used.
-        success      (bool):  True if a deal was reached.
-        total_reward (float): Cumulative RL reward for this episode.
-        id           (int):   SQLite primary key (None until persisted).
-        timestamp    (str):   ISO-8601 UTC time of session completion.
+        cpu, ram     vCPU / GB of the originally requested tier
+        storage      legacy column, always 0
+        budget       user's max monthly budget (USD)
+        final_price  agreed monthly price; 0.0 if no deal
+        final_cpu    vCPU in the final deal (lower if the agent downgraded)
+        final_ram    GB RAM in the final deal
+        rounds       negotiation rounds used
+        success      True if a deal was reached
+        total_reward cumulative RL reward
+        provider     'AWS' | 'GCP' | 'Azure'  ('Legacy' for pre-upgrade rows)
+        algorithm    'qlearning' | 'dqn'
+        tier         originally requested tier ('Small' | 'Medium' | 'Large')
+        quantity     number of instances requested
+        list_price   monthly list price of the configuration actually delivered
+        request_id   groups the 3 negotiations of one Auto request ('' for manual)
+        auto_mode    True if the provider was chosen by the agent (Auto mode)
+        selected     True for the provider that was chosen / the only provider used
     """
 
-    # Required fields (must be provided at construction)
     cpu:         int
     ram:         int
     storage:     int
@@ -54,23 +53,19 @@ class NegotiationSession:
     rounds:      int
     success:     bool
 
-    # Optional fields with defaults
     total_reward: float         = 0.0
+    provider:     str           = "Legacy"
+    algorithm:    str           = "qlearning"
+    tier:         str           = "Custom"
+    quantity:     int           = 1
+    list_price:   float         = 0.0
+    request_id:   str           = ""
+    auto_mode:    bool          = False
+    selected:     bool          = True
     id:           Optional[int] = None
-    timestamp:    str           = field(
-        default_factory=lambda: datetime.utcnow().isoformat()
-    )
+    timestamp:    str           = field(default_factory=_utc_now)
 
     def to_dict(self):
-        """
-        Convert the session to a JSON-serializable dictionary.
-
-        Used by Flask routes to return session data as JSON.
-        Rounds float values to 2 decimal places for cleanliness.
-
-        Returns:
-            dict: All fields with JSON-safe types.
-        """
         return {
             "id":           self.id,
             "cpu":          self.cpu,
@@ -83,5 +78,13 @@ class NegotiationSession:
             "rounds":       self.rounds,
             "success":      self.success,
             "total_reward": round(self.total_reward, 2),
+            "provider":     self.provider,
+            "algorithm":    self.algorithm,
+            "tier":         self.tier,
+            "quantity":     self.quantity,
+            "list_price":   round(self.list_price, 2),
+            "request_id":   self.request_id,
+            "auto_mode":    self.auto_mode,
+            "selected":     self.selected,
             "timestamp":    self.timestamp,
         }

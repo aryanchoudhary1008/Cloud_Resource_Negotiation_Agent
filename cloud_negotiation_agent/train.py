@@ -1,138 +1,162 @@
 """
 train.py
 --------
-Standalone pre-training script for the Q-learning negotiation agent.
+Standalone training + benchmarking script.
 
-Run this BEFORE starting the Flask server to build a quality Q-table.
-The trained Q-table is saved to q_table.pkl and will be auto-loaded
-by app.py on startup.
+Usage
+    python train.py                         # train BOTH algorithms, compare
+    python train.py --algo qlearning        # Q-learning only
+    python train.py --algo dqn              # DQN only
+    python train.py --episodes 5000 --seed 7
+    python train.py --resume                # continue from saved model
 
-Usage:
-    python train.py
-
-What it does:
-    1. Creates a UserAgent in training_mode=True
-    2. Runs TOTAL_EPISODES negotiation episodes with randomized inputs
-    3. Prints progress every PRINT_EVERY episodes (success rate, avg reward, epsilon)
-    4. Decays epsilon each episode (less exploration over time)
-    5. Saves the final Q-table to q_table.pkl
-    6. Prints a summary table
-
-Why pre-train?
-    Without training, the agent acts randomly (epsilon=0.3 → lots of
-    guessing). After 1000 episodes, it has seen hundreds of state
-    combinations and learned which actions lead to good outcomes.
+What it does
+    1. Trains each selected algorithm on the SAME random scenario stream.
+    2. Evaluates each one greedily (ε = 0) on the SAME fixed scenario set,
+       with a per-provider breakdown.
+    3. Saves q_table.pkl / dqn_model.pt.
+    4. Writes results/benchmark.json, results/benchmark.md and (when both
+       algorithms ran) results/learning_curves.png for the report.
 """
 
+import argparse
+import json
+import os
 import random
-import sys
 import time
-from agents.user_agent  import UserAgent
-from rl.state_space     import CPU_BINS, RAM_BINS
 
-# ── Configuration ────────────────────────────────────────────────────
+import numpy as np
 
-TOTAL_EPISODES = 1000     # total training episodes
-PRINT_EVERY    = 100      # print progress every N episodes
-Q_TABLE_PATH   = "q_table.pkl"
+from config import RESULTS_DIR, BENCHMARK_JSON, MODEL_PATHS
+from agents.user_agent import UserAgent
+from rl.trainer import train_agent, evaluate_agent, evaluate_auto, make_eval_set
 
-# ─────────────────────────────────────────────────────────────────────
+LABELS = {"qlearning": "Q-Learning", "dqn": "DQN"}
 
 
-def run_training():
-    """Main training loop."""
+def set_seeds(seed):
+    random.seed(seed)
+    np.random.seed(seed)
+    try:
+        import torch
+        torch.manual_seed(seed)
+    except ImportError:
+        pass
 
-    print()
-    print("=" * 65)
-    print("  Cloud Resource Negotiation Agent — Q-Learning Training")
-    print("=" * 65)
-    print(f"  Episodes   : {TOTAL_EPISODES}")
-    print(f"  Batch size : {PRINT_EVERY}")
-    print(f"  Output     : {Q_TABLE_PATH}")
-    print(f"  CPU tiers  : {CPU_BINS}")
-    print(f"  RAM tiers  : {RAM_BINS}")
-    print("=" * 65)
-    print()
 
-    start_time = time.time()
+def run_one(algo, episodes, eval_set, seed, resume):
+    print("\n" + "=" * 62)
+    print(f"  Training {LABELS[algo]}  ({episodes} episodes, seed {seed})")
+    print("=" * 62)
 
-    # Create training agent (loads existing Q-table if available)
-    agent = UserAgent(training_mode=True, q_table_path=Q_TABLE_PATH)
+    set_seeds(seed)
+    agent = UserAgent(algorithm=algo, training_mode=True, load=resume)
+    if not resume:
+        agent.agent.epsilon = 0.5                      # same start for both algorithms
 
-    # ── Per-episode tracking ──────────────────────────────────────────
-    successes       = 0
-    total_reward    = 0.0
-    episode_rewards = []   # one reward per episode
-    batch_rewards   = []   # rewards within the current PRINT_EVERY window
+    start = time.time()
+    history = train_agent(agent, episodes, seed=seed)
+    elapsed = time.time() - start
+    agent.save()
 
-    print(f"  {'Episode':>8}  {'Success%':>9}  {'Batch Avg Reward':>17}  "
-          f"{'Epsilon':>8}  {'States':>7}")
-    print("  " + "-" * 58)
+    evaluation = evaluate_agent(agent, eval_set)
+    ov = evaluation["overall"]
+    print(f"\n  Evaluation on {ov['episodes']} unseen scenarios (greedy policy):")
+    print(f"    success {ov['success_rate']}%  |  reward {ov['avg_reward']:+.2f}  |  "
+          f"rounds {ov['avg_rounds']}  |  savings {ov['avg_savings_pct']}%  |  "
+          f"tier kept {ov['tier_kept_pct']}%")
+    for p, s in evaluation["by_provider"].items():
+        print(f"      {p:<6} success {s['success_rate']:>5}%   reward {s['avg_reward']:>+6.2f}   "
+              f"savings {s['avg_savings_pct']:>5}%")
+    auto = evaluate_auto(agent, eval_set)
+    print(f"  Auto provider selection: success {auto['success_rate']}% "
+          f"(vs {auto['own_provider_success_rate']}% locked to one provider)  |  "
+          f"tier kept {auto['tier_kept_pct']}%  |  wins {auto['wins']}")
+    print(f"  Training time: {elapsed:.1f}s   {agent.agent.knowledge_label}: "
+          f"{agent.agent.knowledge_size:,}")
 
-    for episode in range(1, TOTAL_EPISODES + 1):
+    return {
+        "algorithm":      algo,
+        "episodes":       episodes,
+        "seed":           seed,
+        "train_seconds":  round(elapsed, 1),
+        "knowledge_label": agent.agent.knowledge_label,
+        "knowledge_size": agent.agent.knowledge_size,
+        "history":        history,
+        "evaluation":     evaluation,
+        "auto_selection": auto,
+    }
 
-        # ── Randomize scenario ─────────────────────────────────────────
-        cpu     = random.choice(CPU_BINS)
-        ram     = random.choice(RAM_BINS)
-        storage = random.randint(50, 500)
-        budget  = random.uniform(10, 150)
 
-        # ── Run one negotiation ────────────────────────────────────────
-        result = agent.negotiate(cpu, ram, storage, budget)
+def write_outputs(results, eval_n):
+    os.makedirs(RESULTS_DIR, exist_ok=True)
+    with open(BENCHMARK_JSON, "w") as f:
+        json.dump({"eval_episodes": eval_n, "results": results}, f, indent=2)
 
-        # ── Track stats ────────────────────────────────────────────────
-        if result.success:
-            successes += 1
-        total_reward        += result.total_reward
-        episode_rewards.append(result.total_reward)
-        batch_rewards.append(result.total_reward)
+    # Markdown table for the report
+    lines = ["| Algorithm | Success % | Avg reward | Avg rounds | Avg savings % | Tier kept % | Train time (s) |",
+             "|---|---|---|---|---|---|---|"]
+    for r in results:
+        o = r["evaluation"]["overall"]
+        lines.append(f"| {LABELS[r['algorithm']]} | {o['success_rate']} | {o['avg_reward']} | "
+                     f"{o['avg_rounds']} | {o['avg_savings_pct']} | {o['tier_kept_pct']} | {r['train_seconds']} |")
+    lines += ["", "Success rate by provider:", "",
+              "| Algorithm | AWS | GCP | Azure |", "|---|---|---|---|"]
+    for r in results:
+        bp = r["evaluation"]["by_provider"]
+        lines.append(f"| {LABELS[r['algorithm']]} | " +
+                     " | ".join(f"{bp[p]['success_rate']}" for p in ("AWS", "GCP", "Azure")) + " |")
+    lines += ["", "Auto provider selection (best of AWS / GCP / Azure):", "",
+              "| Algorithm | Success % (auto) | Success % (single provider) | Tier kept % | AWS wins | GCP wins | Azure wins |",
+              "|---|---|---|---|---|---|---|"]
+    for r in results:
+        a = r["auto_selection"]
+        lines.append(f"| {LABELS[r['algorithm']]} | {a['success_rate']} | {a['own_provider_success_rate']} | "
+                     f"{a['tier_kept_pct']} | {a['wins']['AWS']} | {a['wins']['GCP']} | {a['wins']['Azure']} |")
+    with open(os.path.join(RESULTS_DIR, "benchmark.md"), "w") as f:
+        f.write("\n".join(lines) + "\n")
 
-        # ── Epsilon decay ──────────────────────────────────────────────
-        # Exploration rate drops from 0.3 → 0.05 over training.
-        # After ~1000 episodes with rate=0.995:
-        #   0.3 * (0.995^1000) ≈ 0.0018 → clamped to min 0.05
-        agent.ql_agent.decay_epsilon(decay_rate=0.995, min_epsilon=0.05)
+    # Learning-curve plot
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+    except ImportError:
+        print("  (matplotlib missing — skipped learning_curves.png)")
+        return
 
-        # ── Print batch summary ────────────────────────────────────────
-        if episode % PRINT_EVERY == 0:
-            batch_avg    = sum(batch_rewards) / len(batch_rewards)
-            success_rate = successes / episode * 100
+    fig, (a1, a2) = plt.subplots(1, 2, figsize=(11, 4))
+    for r in results:
+        eps = [h["episode"] for h in r["history"]]
+        a1.plot(eps, [h["avg_reward"]   for h in r["history"]], marker="o", label=LABELS[r["algorithm"]])
+        a2.plot(eps, [h["success_rate"] for h in r["history"]], marker="o", label=LABELS[r["algorithm"]])
+    a1.set(title="Learning curve — average reward", xlabel="Training episode", ylabel="Avg reward / batch")
+    a2.set(title="Learning curve — success rate",  xlabel="Training episode", ylabel="Success % / batch")
+    for ax in (a1, a2):
+        ax.grid(True, alpha=0.3); ax.legend()
+    fig.tight_layout()
+    fig.savefig(os.path.join(RESULTS_DIR, "learning_curves.png"), dpi=130)
+    plt.close(fig)
+    print(f"\n  Saved: {BENCHMARK_JSON}, benchmark.md, learning_curves.png")
 
-            print(f"  {episode:>8}  {success_rate:>8.1f}%  {batch_avg:>+17.3f}  "
-                  f"{agent.ql_agent.epsilon:>8.4f}  {len(agent.ql_agent.q_table):>7}")
 
-            # Store batch average for the /api/graph reward chart
-            agent.ql_agent.training_rewards.append(round(batch_avg, 3))
-            batch_rewards = []   # reset window
+def main():
+    ap = argparse.ArgumentParser(description="Train / benchmark negotiation agents")
+    ap.add_argument("--algo", choices=["qlearning", "dqn", "both"], default="both")
+    ap.add_argument("--episodes", type=int, default=6000)
+    ap.add_argument("--eval-episodes", type=int, default=500)
+    ap.add_argument("--seed", type=int, default=42)
+    ap.add_argument("--resume", action="store_true", help="continue from the saved model")
+    args = ap.parse_args()
 
-            sys.stdout.flush()
+    algos = ["qlearning", "dqn"] if args.algo == "both" else [args.algo]
+    eval_set = make_eval_set(args.eval_episodes)
 
-    # ── Save final metadata ───────────────────────────────────────────
-    agent.ql_agent.episode_count = TOTAL_EPISODES
-    agent.save_q_table()
+    results = [run_one(a, args.episodes, eval_set, args.seed, args.resume) for a in algos]
+    write_outputs(results, args.eval_episodes)
 
-    elapsed = time.time() - start_time
-
-    # ── Final Summary ─────────────────────────────────────────────────
-    print()
-    print("=" * 65)
-    print("  Training Complete!")
-    print("=" * 65)
-    print(f"  Total Episodes   : {TOTAL_EPISODES}")
-    print(f"  Successful Deals : {successes}  ({successes/TOTAL_EPISODES*100:.1f}%)")
-    print(f"  Failed Deals     : {TOTAL_EPISODES - successes}  "
-          f"({(TOTAL_EPISODES-successes)/TOTAL_EPISODES*100:.1f}%)")
-    print(f"  Avg Reward       : {total_reward/TOTAL_EPISODES:+.3f} per episode")
-    print(f"  Final Epsilon    : {agent.ql_agent.epsilon:.4f}")
-    print(f"  States in Q-table: {len(agent.ql_agent.q_table)}")
-    print(f"  Training Time    : {elapsed:.1f} seconds")
-    print(f"  Q-table saved to : {Q_TABLE_PATH}")
-    print("=" * 65)
-    print()
-    print("  Next step: python app.py")
-    print("  Then open: http://127.0.0.1:5000")
-    print()
+    print("\n  Done. Next: python app.py  →  http://127.0.0.1:5000\n")
 
 
 if __name__ == "__main__":
-    run_training()
+    main()

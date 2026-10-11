@@ -1,348 +1,168 @@
 """
 agents/user_agent.py
 --------------------
-User Agent — RL-based negotiation using Q-learning.
+User Agent — the RL customer that negotiates with a cloud provider.
 
-The User Agent represents a cloud customer who negotiates resource
-pricing. It uses a Q-learning policy to decide what to do each round:
-    - Pay more (increase offered price)
-    - Ask for less (downgrade CPU/RAM tier)
-    - Accept the current offer
-    - Reject and walk away
+It can be driven by either learning algorithm:
+    algorithm="qlearning"  tabular Q-learning   (rl/q_learning.py)
+    algorithm="dqn"        Deep Q-Network       (rl/dqn_agent.py, needs PyTorch)
 
-Over many training episodes, the agent learns which actions lead to
-the best outcomes (good price, within budget, fewer rounds wasted).
+The negotiation itself (rules, rewards, logging) lives in
+rl/environment.py, so both algorithms face exactly the same problem.
 
-Training mode:  Q-table is updated after every step.
-Inference mode: Uses the pre-trained Q-table with minimal exploration.
+Training mode : the agent learns after every step.
+Inference mode: weights/table are frozen, ε = 0.05.
 """
 
-from rl.q_learning   import QLearningAgent
-from rl.state_space  import encode_state, CPU_BINS, RAM_BINS
-from agents.provider_agent import ProviderAgent
+from config import MODEL_PATHS, ALGORITHMS
+from rl.environment import NegotiationEnv
+from rl.state_space  import encode_tabular, encode_vector
+from agents.provider_agent import tier_specs, provider_names
 
-# Default file path for the saved Q-table
-Q_TABLE_PATH = "q_table.pkl"
-
-
-# ── Result Container ─────────────────────────────────────────────────
 
 class NegotiationResult:
-    """
-    Holds the complete outcome of a single negotiation session.
+    """Outcome of one negotiation session."""
 
-    Attributes:
-        success      (bool):  Whether a deal was reached.
-        rounds       (int):   How many rounds the negotiation took.
-        final_price  (float): Agreed price (0.0 if no deal).
-        final_cpu    (int):   CPU cores in final deal (may be downgraded).
-        final_ram    (int):   RAM in final deal (may be downgraded).
-        storage      (int):   Storage requested (never negotiated down).
-        budget       (float): User's original budget.
-        total_reward (float): Cumulative RL reward earned this episode.
-        log          (list):  Human-readable round-by-round description.
-    """
-
-    def __init__(self, success, rounds, final_price, final_cpu, final_ram,
-                 storage, budget, total_reward, log):
-        self.success      = success
-        self.rounds       = rounds
-        self.final_price  = final_price
-        self.final_cpu    = final_cpu
-        self.final_ram    = final_ram
-        self.storage      = storage
-        self.budget       = budget
-        self.total_reward = total_reward
-        self.log          = log
+    def __init__(self, env, algorithm):
+        specs = tier_specs()
+        self.algorithm      = algorithm
+        self.provider       = env.provider_name
+        self.success        = env.success
+        self.rounds         = env.round_num
+        self.max_rounds     = env.max_rounds
+        self.final_price    = env.final_price
+        # list_price = on-demand price of the config actually delivered, so
+        # savings measure negotiation skill, not just downgrading
+        self.list_price     = env._list_price()
+        self.requested_list_price = env.requested_list_price
+        self.requested_tier = env.requested_tier
+        self.tier           = env.tier
+        self.quantity       = env.quantity
+        self.downgrades     = env.downgrades
+        self.final_cpu      = specs[env.tier]["vcpu"]
+        self.final_ram      = specs[env.tier]["ram_gb"]
+        self.requested_cpu  = specs[env.requested_tier]["vcpu"]
+        self.requested_ram  = specs[env.requested_tier]["ram_gb"]
+        self.budget         = env.budget
+        self.total_reward   = env.total_reward
+        self.log            = env.log
 
     def to_dict(self):
-        """Serialize to a JSON-safe dict for API responses."""
+        saving = None
+        if self.success and self.list_price > 0:
+            saving = round((self.list_price - self.final_price) / self.list_price * 100, 1)
         return {
-            "success":      self.success,
-            "rounds":       self.rounds,
-            "final_price":  round(self.final_price, 2),
-            "final_cpu":    self.final_cpu,
-            "final_ram":    self.final_ram,
-            "storage":      self.storage,
-            "budget":       self.budget,
-            "total_reward": round(self.total_reward, 2),
-            "log":          self.log,
+            "success":        self.success,
+            "provider":       self.provider,
+            "algorithm":      self.algorithm,
+            "rounds":         self.rounds,
+            "max_rounds":     self.max_rounds,
+            "final_price":    round(self.final_price, 2),
+            "list_price":     round(self.list_price, 2),
+            "requested_list_price": round(self.requested_list_price, 2),
+            "savings_pct":    saving,
+            "requested_tier": self.requested_tier,
+            "tier":           self.tier,
+            "quantity":       self.quantity,
+            "downgrades":     self.downgrades,
+            "final_cpu":      self.final_cpu,
+            "final_ram":      self.final_ram,
+            "budget":         self.budget,
+            "total_reward":   round(self.total_reward, 2),
+            "log":            self.log,
         }
 
 
-# ── User Agent ───────────────────────────────────────────────────────
+def choose_best(results):
+    """
+    Pick the winning negotiation among several providers.
+
+    Ranking (first rule that differs wins):
+      1. a closed deal beats a failed one
+      2. fewer tier downgrades  (the user's requirement is kept)
+      3. lower final price
+      4. fewer rounds
+    If every provider failed, return the attempt with the best reward.
+    """
+    closed = [r for r in results if r.success]
+    if closed:
+        return min(closed, key=lambda r: (r.downgrades, r.final_price, r.rounds))
+    return max(results, key=lambda r: r.total_reward)
+
+
+def make_learner(algorithm):
+    """Create the underlying learning agent (imports PyTorch only for DQN)."""
+    if algorithm == "qlearning":
+        from rl.q_learning import QLearningAgent
+        return QLearningAgent(alpha=0.1, gamma=0.9, epsilon=0.5)
+    if algorithm == "dqn":
+        from rl.dqn_agent import DQNAgent          # raises ImportError without torch
+        return DQNAgent()
+    raise ValueError(f"algorithm must be one of {ALGORITHMS}")
+
 
 class UserAgent:
-    """
-    RL-based user agent that negotiates cloud resource prices.
+    """RL negotiator wrapping a Q-learning or DQN learner and a NegotiationEnv."""
 
-    Internally wraps a QLearningAgent and a ProviderAgent.
-    The negotiate() method runs the full multi-round loop.
-
-    Training mode (training_mode=True):
-        - Q-table is updated after every (state, action, reward, next_state).
-        - Epsilon stays at 0.3 initially (lots of exploration).
-        - Call save_q_table() after training to persist progress.
-
-    Inference mode (training_mode=False):
-        - Q-table is frozen (no updates).
-        - Epsilon is 0.05 (mostly greedy, a little randomness).
-    """
-
-    MAX_ROUNDS = 5
-
-    def __init__(self, training_mode=False, q_table_path=Q_TABLE_PATH):
-        """
-        Args:
-            training_mode (bool): Enable Q-table updates during negotiation.
-            q_table_path  (str):  Path to load/save the Q-table pickle.
-        """
+    def __init__(self, algorithm="qlearning", training_mode=False,
+                 model_path=None, load=True):
+        self.algorithm     = algorithm
         self.training_mode = training_mode
-        self.q_table_path  = q_table_path
+        self.model_path    = model_path or MODEL_PATHS[algorithm]
 
-        # Core RL agent
-        self.ql_agent = QLearningAgent(alpha=0.1, gamma=0.9, epsilon=0.3)
+        self.agent  = make_learner(algorithm)
+        self.encode = encode_tabular if algorithm == "qlearning" else encode_vector
+        self.env    = NegotiationEnv()
 
-        # Rule-based opponent
-        self.provider = ProviderAgent()
-
-        # Attempt to load pre-trained Q-table
-        self.ql_agent.load(q_table_path)
-
-        # In inference mode, mostly exploit the learned policy
+        if load:
+            self.agent.load(self.model_path)
         if not training_mode:
-            self.ql_agent.epsilon = 0.05
+            self.agent.epsilon = 0.05
 
     # ── Public API ───────────────────────────────────────────────────
 
-    def negotiate(self, cpu, ram, storage, budget):
+    def negotiate(self, provider, tier, quantity, budget, max_rounds=None):
         """
-        Run the full negotiation loop for up to MAX_ROUNDS rounds.
+        Run one full negotiation and return a NegotiationResult.
 
-        Each round:
-          1. Provider makes an offer (price decreases each round).
-          2. Encode the current negotiation state → Q-table key.
-          3. Agent picks an action (epsilon-greedy from Q-table).
-          4. Apply action: adjust price / downgrade resources / accept / reject.
-          5. Compute reward.
-          6. Update Q-table (only in training mode).
-          7. If deal accepted or rejected → return result immediately.
-          8. Otherwise → continue to next round.
+        Each round: observe → encode state → choose action → env.step() →
+        (training only) learn from the transition.
+        """
+        obs = self.env.reset(provider, tier, quantity, budget, max_rounds=max_rounds)
+        done = False
 
-        If MAX_ROUNDS pass with no decision → negotiation fails.
+        while not done:
+            state  = self.encode(obs)
+            action = self.agent.choose_action(state)
+            next_obs, reward, done, _ = self.env.step(action)
 
-        Args:
-            cpu     (int):   CPU cores originally requested.
-            ram     (int):   RAM in GB originally requested.
-            storage (int):   Storage in GB (not negotiated down).
-            budget  (float): User's maximum acceptable price.
+            if self.training_mode:
+                self.agent.update(state, action, reward, self.encode(next_obs), done)
+            obs = next_obs
+
+        return NegotiationResult(self.env, self.algorithm)
+
+    def negotiate_best(self, tier, quantity, budget, providers=None):
+        """
+        "Auto" mode: negotiate with every provider and keep the best deal.
 
         Returns:
-            NegotiationResult: Full outcome with log and metrics.
+            (winner, results) — the winning NegotiationResult and the list of
+            all results (one per provider, in provider order).
         """
-        log          = []       # round-by-round narrative
-        total_reward = 0.0
+        results = [self.negotiate(p, tier, quantity, budget)
+                   for p in (providers or provider_names())]
+        return choose_best(results), results
 
-        # Mutable resources — may be downgraded during negotiation
-        current_cpu = cpu
-        current_ram = ram
+    def save(self):
+        self.agent.save(self.model_path)
 
-        # The user's initial "willingness to pay" equals their full budget
-        # (they'll try to get a lower price, but can pay up to budget)
-        user_offered_price = budget
-
-        # Get the undiscounted base price for this configuration
-        base_price = self.provider.calculate_base_price(cpu, ram, storage)
-
-        # ── Negotiation loop ─────────────────────────────────────────
-        for round_num in range(1, self.MAX_ROUNDS + 1):
-
-            # Step 1: Provider makes its offer for this round
-            offer          = self.provider.make_offer(current_cpu, current_ram, storage, round_num)
-            provider_price = offer["price"]
-            final_flag     = "  [FINAL OFFER]" if offer["is_final"] else ""
-
-            log.append(
-                f"Round {round_num}: Provider offers ${provider_price:.2f} "
-                f"for {current_cpu} CPU, {current_ram}GB RAM, "
-                f"{storage}GB storage{final_flag}"
-            )
-
-            # Step 2: Encode current state → hashable tuple for Q-table lookup
-            state = encode_state(
-                cpu=current_cpu,
-                ram=current_ram,
-                budget=budget,
-                current_price=provider_price,
-                round_num=round_num,
-                max_price=base_price,
-            )
-
-            # Step 3: Agent selects an action
-            action = self.ql_agent.choose_action(state)
-            action_labels = [
-                "Increase offered price by 10%",
-                "Decrease resource request",
-                "Accept provider's offer",
-                "Reject — end negotiation",
-            ]
-            log.append(f"Round {round_num}: Agent action → {action_labels[action]}")
-
-            # Step 4 & 5: Apply action and compute immediate reward
-            # Base reward: -1 per round (penalizes slow deals)
-            reward = -1.0
-            done   = False
-
-            # ── ACTION 0: Raise user's offered price ─────────────────
-            if action == 0:
-                # User signals willingness to pay more (up to their budget cap)
-                user_offered_price = min(user_offered_price * 1.10, budget)
-
-                log.append(f"  → User now offering ${user_offered_price:.2f}")
-
-                # Check if provider accepts this counter-offer
-                if self.provider.evaluate_user_offer(user_offered_price, base_price):
-                    # Deal struck — use the lower of the two prices
-                    final_price = min(user_offered_price, provider_price)
-                    done = True
-
-                    if final_price <= budget:
-                        reward += 10.0   # good deal — within budget
-                        log.append(f"  Provider accepted! Deal at ${final_price:.2f}")
-                    else:
-                        reward += -5.0   # deal but over budget
-                        log.append(f"  Provider accepted, but over budget: ${final_price:.2f}")
-
-                    self._update_q(state, action, reward, state, done=True)
-                    total_reward += reward
-
-                    return NegotiationResult(
-                        success=True,  rounds=round_num,
-                        final_price=final_price,
-                        final_cpu=current_cpu,   final_ram=current_ram,
-                        storage=storage,          budget=budget,
-                        total_reward=total_reward, log=log,
-                    )
-                else:
-                    log.append(
-                        f"  → Provider rejected ${user_offered_price:.2f} "
-                        f"(minimum: ${base_price * self.provider.MIN_PROFIT_RATIO:.2f})"
-                    )
-
-            # ── ACTION 1: Downgrade resources ─────────────────────────
-            elif action == 1:
-                # Reduce CPU and/or RAM by one tier to lower the price
-                cpu_idx = CPU_BINS.index(current_cpu) if current_cpu in CPU_BINS else 1
-                ram_idx = RAM_BINS.index(current_ram) if current_ram in RAM_BINS else 1
-
-                downgraded = False
-                if cpu_idx > 0:
-                    current_cpu = CPU_BINS[cpu_idx - 1]
-                    downgraded  = True
-                if ram_idx > 0:
-                    current_ram = RAM_BINS[ram_idx - 1]
-                    downgraded  = True
-
-                if downgraded:
-                    log.append(
-                        f"  → Resources reduced to {current_cpu} CPU, {current_ram}GB RAM"
-                    )
-                    # Recalculate base price with the new lower config
-                    base_price = self.provider.calculate_base_price(current_cpu, current_ram, storage)
-                else:
-                    log.append("  → Already at minimum resources, cannot downgrade further")
-
-            # ── ACTION 2: Accept provider's current offer ─────────────
-            elif action == 2:
-                final_price = provider_price
-                done = True
-
-                if final_price <= budget:
-                    reward += 10.0
-                    log.append(f"  Deal accepted at ${final_price:.2f}!")
-                else:
-                    reward += -5.0
-                    log.append(f"  Accepted but over budget: ${final_price:.2f}")
-
-                self._update_q(state, action, reward, state, done=True)
-                total_reward += reward
-
-                return NegotiationResult(
-                    success=True,  rounds=round_num,
-                    final_price=final_price,
-                    final_cpu=current_cpu,   final_ram=current_ram,
-                    storage=storage,          budget=budget,
-                    total_reward=total_reward, log=log,
-                )
-
-            # ── ACTION 3: Reject — terminate negotiation ──────────────
-            elif action == 3:
-                reward += -10.0   # heavy penalty for walking away
-                done    = True
-                log.append("  Negotiation rejected by agent. No deal.")
-
-                self._update_q(state, action, reward, state, done=True)
-                total_reward += reward
-
-                return NegotiationResult(
-                    success=False, rounds=round_num,
-                    final_price=0.0,
-                    final_cpu=current_cpu,   final_ram=current_ram,
-                    storage=storage,          budget=budget,
-                    total_reward=total_reward, log=log,
-                )
-
-            # ── Q-table update for non-terminal steps ─────────────────
-            # Compute what the state WILL look like next round
-            if not done:
-                next_offer = self.provider.make_offer(
-                    current_cpu, current_ram, storage, round_num + 1
-                )
-                next_state = encode_state(
-                    cpu=current_cpu,
-                    ram=current_ram,
-                    budget=budget,
-                    current_price=next_offer["price"],
-                    round_num=round_num + 1,
-                    max_price=base_price,
-                )
-                self._update_q(state, action, reward, next_state, done=False)
-                total_reward += reward
-
-        # ── Max rounds exhausted without a deal ──────────────────────
-        reward = -10.0
-        total_reward += reward
-        log.append(f"Maximum {self.MAX_ROUNDS} rounds reached. Negotiation failed.")
-
-        return NegotiationResult(
-            success=False, rounds=self.MAX_ROUNDS,
-            final_price=0.0,
-            final_cpu=current_cpu,    final_ram=current_ram,
-            storage=storage,           budget=budget,
-            total_reward=total_reward, log=log,
-        )
-
-    # ── Internal Helpers ─────────────────────────────────────────────
-
-    def _update_q(self, state, action, reward, next_state, done):
-        """Update Q-table only when in training mode."""
-        if self.training_mode:
-            self.ql_agent.update(state, action, reward, next_state, done)
-
-    def save_q_table(self):
-        """Persist the Q-table to disk."""
-        self.ql_agent.save(self.q_table_path)
+    def reload(self):
+        self.agent.load(self.model_path)
 
     def set_training_mode(self, mode: bool):
-        """
-        Toggle training mode at runtime.
-
-        Args:
-            mode (bool): True to enable Q-table updates; False to freeze.
-        """
         self.training_mode = mode
-        # Adjust exploration rate based on mode
         if mode:
-            self.ql_agent.epsilon = max(self.ql_agent.epsilon, 0.1)
+            self.agent.epsilon = max(self.agent.epsilon, 0.1)
         else:
-            self.ql_agent.epsilon = 0.05
+            self.agent.epsilon = 0.05
