@@ -121,7 +121,7 @@ class UserAgent:
 
     # ── Public API ───────────────────────────────────────────────────
 
-    def negotiate(self, provider, tier, quantity, budget, max_rounds=None):
+    def negotiate(self, provider, tier, quantity, budget, max_rounds=None, **kwargs):
         """
         Run one full negotiation and return a NegotiationResult.
 

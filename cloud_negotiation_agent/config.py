@@ -26,6 +26,9 @@ DQN_MODEL_PATH = os.path.join(BASE_DIR, "dqn_model.pt")
 RESULTS_DIR    = os.path.join(BASE_DIR, "results")
 BENCHMARK_JSON = os.path.join(RESULTS_DIR, "benchmark.json")
 
+# Dataset splits directory
+DATA_DIR       = os.path.join(BASE_DIR, "data")
+
 MODEL_PATHS = {
     "qlearning": Q_TABLE_PATH,
     "dqn":       DQN_MODEL_PATH,

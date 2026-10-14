@@ -94,7 +94,7 @@ def test_tabular_encoding_hashable_and_bounded():
 def test_vector_encoding_shape_and_range():
     v = encode_vector(env("Azure").reset("Azure", "Small", 1000, 50))
     assert v.shape == (STATE_DIM,) and v.dtype == np.float32
-    assert 0.0 <= v.min() and v.max() <= 1.5
+    assert -1.0 <= v.min() and v.max() <= 1.5
     assert v[2] == 1.0     # Azure one-hot
 
 
@@ -210,3 +210,62 @@ def test_api_manual_provider_and_validation(client):
     assert ok.status_code == 200 and not ok.get_json()["auto"]
     bad = client.post("/api/negotiate", json={"provider": "Oracle", "tier": "Small", "quantity": 2, "budget": 100})
     assert bad.status_code == 400
+
+
+# ── Dataset & Evaluation tests ───────────────────────────────────────
+def test_dataset_splits_and_reproducibility(tmp_path):
+    from rl.dataset import build_dataset, load_split
+    p1 = str(tmp_path / "d1")
+    p2 = str(tmp_path / "d2")
+
+    res1 = build_dataset(n=300, seed=42, out_dir=p1)
+    res2 = build_dataset(n=300, seed=42, out_dir=p2)
+    assert res1 == res2
+
+    train = load_split("train", data_dir=p1)
+    val   = load_split("val", data_dir=p1)
+    test  = load_split("test", data_dir=p1)
+
+    assert len(train) + len(val) + len(test) == 300
+    ids_train = {r["id"] for r in train}
+    ids_val   = {r["id"] for r in val}
+    ids_test  = {r["id"] for r in test}
+
+    # No overlap
+    assert len(ids_train & ids_val) == 0
+    assert len(ids_train & ids_test) == 0
+    assert len(ids_val & ids_test) == 0
+
+
+def test_feasibility_logic():
+    from rl.dataset import is_scenario_feasible
+    # Extremely low budget: impossible even on Small
+    assert not is_scenario_feasible("AWS", "Large", 100, 1.0)
+    # Generous budget: completely feasible
+    assert is_scenario_feasible("AWS", "Large", 1, 5000.0)
+
+
+def test_api_evaluate_and_dataset_summary(client):
+    # GET /api/dataset/summary
+    res = client.get("/api/dataset/summary")
+    assert res.status_code == 200
+    summary = res.get_json()
+    assert "train" in summary and "val" in summary and "test" in summary
+    assert summary["test"]["total"] > 0
+    assert "feasible_rate" in summary["test"]
+
+    # POST /api/evaluate with qlearning on val split (limit 5 for speed)
+    eval_res = client.post("/api/evaluate", json={"algorithm": "qlearning", "split": "val", "limit": 5})
+    assert eval_res.status_code == 200
+    d = eval_res.get_json()
+    assert "overall" in d and "by_provider" in d and "ceiling" in d and "auto" in d
+    assert "feasible_ceiling" in d["overall"]
+    assert "feasible_success_rate" in d["overall"]
+    assert d["overall"]["episodes"] == 5
+
+    # POST /api/validate
+    val_res = client.post("/api/validate", json={"algorithm": "qlearning", "limit": 5})
+    assert val_res.status_code == 200
+    vd = val_res.get_json()
+    assert "results" in vd and "qlearning" in vd["results"]
+

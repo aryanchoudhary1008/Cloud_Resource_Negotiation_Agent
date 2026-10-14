@@ -47,6 +47,7 @@ function showSection(name) {
     history:   "history-section",
     stats:     "stats-section",
     train:     "train-section",
+    test:      "test-section",
   };
 
   Object.entries(sections).forEach(([key, id]) => {
@@ -60,7 +61,9 @@ function showSection(name) {
   // Auto-load data for sections that need it
   if (name === "history") loadHistory();
   if (name === "stats")   loadStats();
+  if (name === "test")    loadDatasetSummary();
 }
+
 
 // ── Live Price Preview ─────────────────────────────────────────────
 
@@ -521,3 +524,160 @@ async function loadGraph() {
     console.error("[Graph] Error:", err);
   }
 }
+
+// ── Testing & Benchmark ────────────────────────────────────────────
+
+let DATASET_SUMMARY = null;
+
+async function loadDatasetSummary() {
+  const container = document.getElementById("dataset-summary-text");
+  if (!container) return;
+  try {
+    const res = await fetch("/api/dataset/summary");
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Failed to load dataset summary");
+    DATASET_SUMMARY = data;
+
+    const split = document.getElementById("test-split")?.value || "test";
+    const current = data[split] || {};
+    const total = current.total || 0;
+    const ceiling = current.feasible_rate || 0;
+    const diffs = current.difficulties || {};
+
+    container.innerHTML = `
+      <div><strong>${split.toUpperCase()} Split:</strong> ${total.toLocaleString()} scenarios (${ceiling}% feasible ceiling)</div>
+      <div style="margin-top:0.3rem;"><strong>Difficulty:</strong> Easy: ${diffs.easy || 0} | Med: ${diffs.medium || 0} | Hard: ${diffs.hard || 0} | Exp: ${diffs.expert || 0}</div>
+      <div style="margin-top:0.3rem;"><strong>Total Dataset:</strong> 6,000 scenarios stratified 70% Train / 15% Val / 15% Test</div>
+    `;
+  } catch (err) {
+    container.innerHTML = `<span style="color:var(--accent-red)">${err.message}</span>`;
+  }
+}
+
+async function handleEvaluate() {
+  const btn = document.getElementById("test-btn");
+  const btnText = document.getElementById("test-btn-text");
+  const spinner = document.getElementById("test-spinner");
+  const algorithm = document.getElementById("test-algorithm").value;
+  const split = document.getElementById("test-split").value;
+  const limit = document.getElementById("test-limit").value;
+
+  btn.disabled = true;
+  btnText.textContent = "Evaluating...";
+  spinner.classList.remove("hidden");
+
+  try {
+    const payload = { algorithm, split };
+    if (limit) payload.limit = parseInt(limit);
+
+    const res = await fetch("/api/evaluate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `Server error ${res.status}`);
+
+    const empty = document.getElementById("test-empty");
+    const results = document.getElementById("test-results");
+    if (empty) empty.classList.add("hidden");
+    if (results) results.classList.remove("hidden");
+
+    const ov = data.overall || {};
+    const algoName = algorithm === "dqn" ? "DQN" : "Q-Learning";
+    const splitName = split === "test" ? "Test (Unseen)" : "Validation";
+
+    document.getElementById("test-results-subtitle").textContent =
+      `${algoName} evaluated on ${ov.episodes} scenarios from ${splitName} split`;
+
+    document.getElementById("test-success-rate").textContent = `${ov.success_rate}%`;
+    document.getElementById("test-ceiling").textContent = `${ov.feasible_ceiling}%`;
+    document.getElementById("test-feasible-rate").textContent = `${ov.feasible_success_rate}%`;
+    document.getElementById("test-avg-reward").textContent = (ov.avg_reward >= 0 ? "+" : "") + ov.avg_reward.toFixed(2);
+    document.getElementById("test-savings").textContent = `${ov.avg_savings_pct}%`;
+    document.getElementById("test-tier-kept").textContent = `${ov.tier_kept_pct}%`;
+
+    document.getElementById("test-headline-text").textContent =
+      `${algoName} achieved ${ov.success_rate}% success (${ov.feasible_success_rate}% of the ${ov.feasible_ceiling}% achievable ceiling).`;
+
+    // Provider table
+    const provTable = document.getElementById("test-provider-table");
+    if (provTable && data.by_provider) {
+      provTable.innerHTML = `
+        <thead>
+          <tr>
+            <th>Provider</th>
+            <th>Scenarios</th>
+            <th>Success %</th>
+            <th>Achievable Ceiling %</th>
+            <th>Avg Reward</th>
+            <th>Avg Savings %</th>
+            <th>Tier Kept %</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${Object.entries(data.by_provider).map(([p, s]) => `
+            <tr>
+              <td><strong>${p}</strong></td>
+              <td>${s.episodes}</td>
+              <td>${s.success_rate}%</td>
+              <td>${s.feasible_ceiling}%</td>
+              <td>${(s.avg_reward >= 0 ? "+" : "") + s.avg_reward.toFixed(2)}</td>
+              <td>${s.avg_savings_pct}%</td>
+              <td>${s.tier_kept_pct}%</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      `;
+    }
+
+    // Auto summary
+    const autoSummary = document.getElementById("test-auto-summary");
+    if (autoSummary && data.auto) {
+      const a = data.auto;
+      const winsStr = Object.entries(a.wins || {}).map(([p, count]) => `${p}: ${count}`).join(" · ");
+      autoSummary.innerHTML = `
+        <div><strong>Multi-Provider Success:</strong> ${a.success_rate}% (vs ${a.own_provider_success_rate}% if locked to a single provider)</div>
+        <div style="margin-top:0.3rem;"><strong>Provider Wins:</strong> ${winsStr}</div>
+        <div style="margin-top:0.3rem;"><strong>Average Savings:</strong> ${a.avg_savings_pct}% &nbsp;|&nbsp; <strong>Tier Maintained:</strong> ${a.tier_kept_pct}%</div>
+      `;
+    }
+
+    // Failure reasons table
+    const failuresTable = document.getElementById("test-failures-table");
+    if (failuresTable) {
+      const fails = data.failures || {};
+      const failEntries = Object.entries(fails);
+      if (failEntries.length === 0) {
+        failuresTable.innerHTML = `<tbody><tr><td colspan="2" style="color:var(--text-muted); text-align:center;">No failures recorded in this run!</td></tr></tbody>`;
+      } else {
+        failuresTable.innerHTML = `
+          <thead>
+            <tr>
+              <th>Termination Reason</th>
+              <th>Occurrences</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${failEntries.map(([reason, count]) => `
+              <tr>
+                <td>${reason}</td>
+                <td>${count}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        `;
+      }
+    }
+
+  } catch (err) {
+    alert(`Evaluation failed: ${err.message}`);
+    console.error("[Evaluate] Error:", err);
+  } finally {
+    btn.disabled = false;
+    btnText.textContent = "▶ Run Evaluation";
+    spinner.classList.add("hidden");
+  }
+}
+

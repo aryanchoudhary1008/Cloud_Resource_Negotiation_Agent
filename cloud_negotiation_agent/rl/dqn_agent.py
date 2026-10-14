@@ -197,5 +197,6 @@ class DQNAgent:
         self.training_history = data.get("training_history", [])
 
         print(f"[DQN-Agent] Loaded model from '{path}' "
-              f"(trained for {self.episode_count} episodes, ε={self.epsilon:.4f})")
+              f"(trained for {self.episode_count} episodes, eps={self.epsilon:.4f})")
         return True
+

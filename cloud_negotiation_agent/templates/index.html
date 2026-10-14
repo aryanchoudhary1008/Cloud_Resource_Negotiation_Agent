@@ -21,6 +21,7 @@
       <a href="#history-section" onclick="showSection('history')">History</a>
       <a href="#stats-section" onclick="showSection('stats')">Stats</a>
       <a href="#train-section" onclick="showSection('train')">Training</a>
+      <a href="#test-section" onclick="showSection('test')" id="nav-test">Testing &amp; Evaluation</a>
 
       <button id="theme-toggle" class="theme-btn" onclick="toggleTheme()" title="Toggle Light/Dark Mode">&#9788;
         Theme</button>
@@ -417,7 +418,138 @@
       </div>
     </section>
 
+    <!-- ══════════════════════════════════════════════════════════════
+         SECTION 5 — TESTING & VALIDATION
+    ══════════════════════════════════════════════════════════════ -->
+    <section id="test-section" class="section hidden">
+      <div class="two-col">
+
+        <!-- Left: Evaluation Controls & Dataset Summary -->
+        <div class="card">
+          <div class="card-header">
+            <h2>&#129514; Benchmark &amp; Testing</h2>
+            <p class="card-subtitle">Evaluate models against the controlled dataset split</p>
+          </div>
+
+          <div class="form-group">
+            <label for="test-algorithm">Algorithm</label>
+            <select id="test-algorithm" class="form-control">
+              <option value="dqn">DQN (Deep Q-Network)</option>
+              <option value="qlearning">Q-Learning (Tabular)</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="test-split">Dataset Split</label>
+            <select id="test-split" class="form-control" onchange="loadDatasetSummary()">
+              <option value="test" selected>Test Split (Unseen Scenarios)</option>
+              <option value="val">Validation Split (Checkpoints)</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="test-limit">Sample Size</label>
+            <select id="test-limit" class="form-control">
+              <option value="200">200 scenarios (Fast check)</option>
+              <option value="500">500 scenarios (Balanced)</option>
+              <option value="" selected>Full split (Comprehensive benchmark)</option>
+            </select>
+          </div>
+
+          <!-- Dataset Architecture Card -->
+          <div class="algo-info" style="margin-top: 1rem;">
+            <h3>Dataset Architecture</h3>
+            <div id="dataset-summary-text" style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.5;">
+              Loading dataset summary...
+            </div>
+          </div>
+
+          <button class="btn btn-primary" id="test-btn" onclick="handleEvaluate()">
+            <span id="test-btn-text">&#9654; Run Evaluation</span>
+            <span id="test-spinner" class="spinner hidden"></span>
+          </button>
+        </div>
+
+        <!-- Right: Evaluation Results -->
+        <div class="card">
+          <div class="card-header">
+            <h2>&#127942; Evaluation Results</h2>
+            <p class="card-subtitle" id="test-results-subtitle">Performance vs Feasible Ceiling</p>
+          </div>
+
+          <div id="test-empty" class="empty-state">
+            <div class="empty-icon">&#128203;</div>
+            <p>Select an algorithm and dataset split to run benchmark evaluation.</p>
+          </div>
+
+          <div id="test-results" class="hidden">
+            <div class="stats-grid">
+              <div class="stat-card">
+                <div class="stat-icon">&#127919;</div>
+                <div class="stat-value" id="test-success-rate">—</div>
+                <div class="stat-label">Success Rate</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-icon">&#128065;</div>
+                <div class="stat-value" id="test-ceiling">—</div>
+                <div class="stat-label">Feasible Ceiling</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-icon">&#128175;</div>
+                <div class="stat-value" id="test-feasible-rate">—</div>
+                <div class="stat-label">Feasible Success %</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-icon">&#127381;</div>
+                <div class="stat-value" id="test-avg-reward">—</div>
+                <div class="stat-label">Avg Reward</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-icon">&#128185;</div>
+                <div class="stat-value" id="test-savings">—</div>
+                <div class="stat-label">Avg Savings %</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-icon">&#128737;</div>
+                <div class="stat-value" id="test-tier-kept">—</div>
+                <div class="stat-label">Tier Kept %</div>
+              </div>
+            </div>
+
+            <div class="train-success-msg" id="test-headline-msg" style="margin-top:1rem;">
+              &#10003; <span id="test-headline-text">Evaluation complete.</span>
+            </div>
+
+            <!-- Provider Breakdown -->
+            <div class="graph-section" style="margin-top:1.5rem;">
+              <div class="graph-header"><span>Performance by Cloud Provider</span></div>
+              <div class="table-wrapper">
+                <table class="data-table" id="test-provider-table"></table>
+              </div>
+            </div>
+
+            <!-- Auto Provider Selection -->
+            <div class="graph-section" style="margin-top:1.5rem;">
+              <div class="graph-header"><span>Multi-Cloud Auto Selection</span></div>
+              <div id="test-auto-summary" style="padding: 0.8rem; font-size: 0.88rem; line-height: 1.6; color: var(--text-normal);"></div>
+            </div>
+
+            <!-- Failure Reasons Breakdown -->
+            <div class="graph-section" style="margin-top:1.5rem;">
+              <div class="graph-header"><span>Failure Diagnostics</span></div>
+              <div class="table-wrapper">
+                <table class="data-table" id="test-failures-table"></table>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+      </div>
+    </section>
+
   </main>
+
 
   <!-- ── Footer ──────────────────────────────────────────────────── -->
   <footer class="footer">

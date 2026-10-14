@@ -32,13 +32,13 @@ from agents.provider_agent import provider_names, tier_names
 PROVIDERS = provider_names()
 TIERS     = tier_names()
 
-# Bump this whenever the encoding OR the reward function changes (v3: downgrade shaping). Saved models carry the version
-# and are ignored if it does not match (old q_table.pkl files are stale).
-STATE_VERSION = 3
+# Bump this whenever the encoding OR the reward function changes (v4: price_gap_to_floor feature).
+# Saved models carry the version and are ignored if it does not match (old q_table.pkl/dqn_model.pt are stale).
+STATE_VERSION = 4
 
 # Dimension of the DQN input vector:
-#   provider one-hot + tier one-hot + 7 continuous features
-STATE_DIM = len(PROVIDERS) + len(TIERS) + 7
+#   provider one-hot + tier one-hot + 8 continuous features
+STATE_DIM = len(PROVIDERS) + len(TIERS) + 8
 
 # Tabular bin edges
 BUDGET_EDGES = [0.55, 0.70, 0.85, 1.00]      # → 5 budget bins
@@ -97,6 +97,7 @@ def encode_vector(obs):
         bid_ratio      user bid / list price
         budget_ratio   budget / list price, clipped to 1.5 then / 1.5
         gap            (offer - bid) / offer
+        floor_gap      (bid - floor) / list price, clipped to [-1.0, 1.0]
     """
     vec = np.zeros(STATE_DIM, dtype=np.float32)
     p, t = len(PROVIDERS), len(TIERS)
@@ -112,4 +113,11 @@ def encode_vector(obs):
     vec[base + 4] = obs["bid_ratio"]
     vec[base + 5] = min(obs["budget_ratio"], 1.5) / 1.5
     vec[base + 6] = obs["gap"]
+
+    list_p = obs.get("list_price", 1.0)
+    floor_p = obs.get("floor_price", 0.0)
+    bid_p = obs.get("bid", 0.0)
+    gap_floor = (bid_p - floor_p) / list_p if list_p > 0 else 0.0
+    vec[base + 7] = float(np.clip(gap_floor, -1.0, 1.0))
     return vec
+

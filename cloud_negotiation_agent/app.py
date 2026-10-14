@@ -30,7 +30,8 @@ from agents.provider_agent import (load_config, provider_names, tier_names,
                                    tier_specs, hours_per_month, ProviderAgent)
 from models.negotiation    import NegotiationSession
 from database.db           import init_db, save_session, get_all_sessions, get_stats
-from rl.trainer            import train_agent
+from rl.trainer            import train_agent, evaluate_agent, evaluate_auto
+from rl.dataset            import load_split, dataset_summary, feasible_rate
 
 app = Flask(__name__)
 init_db()
@@ -223,18 +224,24 @@ def train():
     if algorithm in _agents:
         _agents[algorithm].reload()
 
-    total_batches = len(history)
+    # Measure performance from the converged exploitation phase (final half of training)
+    # so the dashboard reflects the trained policy rather than initial exploratory random actions
+    converged = history[len(history) // 2:] if len(history) >= 2 else history
+    success_rate = round(sum(h["success_rate"] for h in converged) / len(converged), 1)
+    avg_reward   = round(sum(h["avg_reward"] for h in converged) / len(converged), 3)
+
     return jsonify({
         "algorithm":       algorithm,
         "episodes_trained": episodes,
-        "success_rate":    round(sum(h["success_rate"] for h in history) / total_batches, 1),
-        "avg_reward":      round(sum(h["avg_reward"] for h in history) / total_batches, 3),
+        "success_rate":    success_rate,
+        "avg_reward":      avg_reward,
         "knowledge_size":  trainer.agent.knowledge_size,
         "knowledge_label": trainer.agent.knowledge_label,
         "current_epsilon": round(trainer.agent.epsilon, 4),
         "total_episodes":  trainer.agent.episode_count,
         "seconds":         round(time.time() - start, 1),
     })
+
 
 
 # ── API: benchmark ───────────────────────────────────────────────────
@@ -246,6 +253,91 @@ def benchmark():
         return jsonify({"error": "No benchmark yet. Run: python train.py"}), 404
     with open(BENCHMARK_JSON) as f:
         return jsonify(json.load(f))
+
+
+# ── API: dataset & evaluation ────────────────────────────────────────
+
+@app.route("/api/dataset/summary", methods=["GET"])
+def get_dataset_summary():
+    """Row counts, feasibility ceiling, difficulty and provider breakdowns."""
+    try:
+        return jsonify(dataset_summary())
+    except Exception as ex:
+        return jsonify({"error": str(ex)}), 500
+
+
+@app.route("/api/evaluate", methods=["POST"])
+def evaluate():
+    """
+    Greedy evaluation on a dataset split.
+    Body (JSON, optional):
+        algorithm  'dqn' | 'qlearning' (default 'dqn')
+        split      'test' | 'val' (default 'test')
+        limit      int (optional subset limit)
+    """
+    d = request.get_json(silent=True) or {}
+    algo  = str(d.get("algorithm", "dqn")).lower()
+    split = str(d.get("split", "test")).lower()
+
+    if algo not in ALGORITHMS:
+        return jsonify({"error": f"algorithm must be one of {list(ALGORITHMS)}"}), 400
+    if split not in ("test", "val", "train"):
+        return jsonify({"error": "split must be 'test' or 'val'"}), 400
+
+    try:
+        agent = get_agent(algo)
+    except ImportError:
+        return jsonify({"error": "DQN needs PyTorch. Run: pip install torch"}), 503
+    except Exception as ex:
+        return jsonify({"error": f"Failed to initialize agent: {ex}"}), 500
+
+    try:
+        scenarios = load_split(split)
+        limit = d.get("limit")
+        if limit:
+            scenarios = scenarios[:max(1, int(limit))]
+        ev   = evaluate_agent(agent, scenarios)
+        auto = evaluate_auto(agent, scenarios)
+        ev["auto"] = auto
+        ev["algorithm"] = algo
+        ev["split"] = split
+        return jsonify(ev)
+    except Exception as ex:
+        return jsonify({"error": str(ex)}), 500
+
+
+@app.route("/api/validate", methods=["POST"])
+def validate():
+    """
+    Run validation on saved models for Q-Learning and/or DQN against data/val.csv.
+    """
+    d = request.get_json(silent=True) or {}
+    requested_algo = d.get("algorithm")
+    algos = [requested_algo] if (requested_algo and requested_algo in ALGORITHMS) else list(ALGORITHMS)
+
+    try:
+        val_scenarios = load_split("val")
+        limit = d.get("limit")
+        if limit:
+            val_scenarios = val_scenarios[:max(1, int(limit))]
+
+        results = {}
+        for a in algos:
+            try:
+                ag = get_agent(a)
+                results[a] = evaluate_agent(ag, val_scenarios)
+            except Exception as ex:
+                results[a] = {"error": str(ex)}
+
+        return jsonify({
+            "split": "val",
+            "ceiling": feasible_rate(val_scenarios),
+            "episodes": len(val_scenarios),
+            "results": results,
+        })
+    except Exception as ex:
+        return jsonify({"error": str(ex)}), 500
+
 
 
 # ── API: graph ───────────────────────────────────────────────────────
