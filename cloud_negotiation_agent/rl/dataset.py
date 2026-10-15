@@ -216,22 +216,3 @@ def dataset_summary(data_dir=DATA_DIR):
             "providers":       dict(prov_counts),
         }
     return summary
-
-            build_dataset(out_dir=data_dir)
-        rows = load_split(split, data_dir=data_dir)
-        n = len(rows)
-        diff_counts = defaultdict(int)
-        prov_counts = defaultdict(int)
-        for r in rows:
-            diff_counts[r["difficulty"]] += 1
-            prov_counts[r["provider"]] += 1
-
-        summary[split] = {
-            "total":         n,
-            "feasible_rate": feasible_rate(rows),
-            "feasible_count": sum(1 for r in rows if r["feasible"]),
-            "difficulties":  dict(diff_counts),
-            "providers":     dict(prov_counts),
-        }
-    return summary
-
