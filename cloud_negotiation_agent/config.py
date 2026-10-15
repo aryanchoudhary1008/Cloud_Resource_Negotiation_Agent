@@ -23,8 +23,10 @@ Q_TABLE_PATH   = os.path.join(BASE_DIR, "q_table.pkl")
 DQN_MODEL_PATH = os.path.join(BASE_DIR, "dqn_model.pt")
 
 # Benchmark output (train.py writes here, /api/benchmark reads from here)
-RESULTS_DIR    = os.path.join(BASE_DIR, "results")
-BENCHMARK_JSON = os.path.join(RESULTS_DIR, "benchmark.json")
+RESULTS_DIR            = os.path.join(BASE_DIR, "results")
+BENCHMARK_JSON         = os.path.join(RESULTS_DIR, "benchmark.json")
+MULTISEED_BENCHMARK_JSON = os.path.join(RESULTS_DIR, "multiseed_benchmark.json")
+MULTISEED_BENCHMARK_MD   = os.path.join(RESULTS_DIR, "multiseed_benchmark.md")
 
 # Dataset splits directory
 DATA_DIR       = os.path.join(BASE_DIR, "data")
