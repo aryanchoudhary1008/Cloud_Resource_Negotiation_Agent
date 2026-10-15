@@ -193,14 +193,77 @@ def train_agent(user_agent, episodes=500, scenarios=None, val_scenarios=None,
     return history
 
 
+_DIFFICULTIES = ("easy", "medium", "hard", "expert")
+
+
+def _detect_walkaway(result_log):
+    """Return True when the agent itself chose WALK_AWAY (not provider patience exhaustion).
+
+    The environment produces two distinct terminal log lines:
+      - Agent walk-away : "Negotiation ended by agent. No deal."
+      - Patience        : "Provider patience (...) exhausted. Negotiation failed."
+    We scan from the end so we hit the terminal line first.
+    """
+    for line in reversed(result_log or []):
+        low = line.lower()
+        if "negotiation ended by agent" in low:
+            return True
+        if "patience" in low and "exhausted" in low:
+            return False
+    return False
+
+
+def _walk_away_accuracy(wa_rows):
+    """
+    Compute precision and recall of the agent's WALK_AWAY decisions.
+
+    Treating 'walk away on an infeasible scenario' as the positive event:
+
+      TP (correct_walkaway)   : agent walked away AND scenario infeasible
+      FP (missed_opportunity) : agent walked away BUT scenario was feasible
+      FN (missed_refusal)     : agent did NOT walk away, scenario infeasible
+      TN                      : agent engaged, scenario feasible  (not stored)
+
+    precision = TP / (TP + FP)
+        Of all walk-aways, what fraction were warranted?
+        None when the agent never walked away.
+
+    recall = TP / (TP + FN)
+        Of all infeasible scenarios, what fraction led to a walk-away?
+        None when there are no infeasible scenarios in the set.
+
+    Both values are percentages (0-100) or None if undefined.
+    """
+    tp = sum(1 for wa, feas in wa_rows if wa and not feas)
+    fp = sum(1 for wa, feas in wa_rows if wa and feas)
+    fn = sum(1 for wa, feas in wa_rows if not wa and not feas)
+
+    precision = round(tp / (tp + fp) * 100, 1) if (tp + fp) > 0 else None
+    recall    = round(tp / (tp + fn) * 100, 1) if (tp + fn) > 0 else None
+
+    return {
+        "correct_walkaway":   tp,
+        "missed_opportunity": fp,
+        "missed_refusal":     fn,
+        "precision_pct":      precision,
+        "recall_pct":         recall,
+    }
+
+
 def evaluate_agent(user_agent, scenarios):
     """
-    Greedy evaluation (ε = 0, no learning) on a fixed list of scenarios.
+    Greedy evaluation (epsilon = 0, no learning) on a fixed list of scenarios.
 
-    Returns:
-        {"overall": {...}, "by_provider": {name: {...}}, "failures": {...}}
-        each block includes: episodes, success_rate (%), feasible_ceiling (%),
-        feasible_success_rate (%), avg_reward, avg_rounds, avg_savings_pct, tier_kept_pct
+    All existing return keys are preserved unchanged.  New additive keys:
+        by_difficulty      - per-difficulty stats (easy/medium/hard/expert),
+                             same structure as by_provider entries
+        walk_away_accuracy - precision/recall of walk-away decisions;
+                             see _walk_away_accuracy() for definitions
+
+    Each stats block (overall / by_provider / by_difficulty) includes:
+        episodes, success_rate (%), feasible_ceiling (%),
+        feasible_success_rate (%), avg_reward, avg_rounds,
+        avg_savings_pct, tier_kept_pct
     """
     was_training, old_eps = user_agent.training_mode, user_agent.agent.epsilon
     user_agent.training_mode = False
@@ -208,26 +271,32 @@ def evaluate_agent(user_agent, scenarios):
 
     rows = []
     failure_counts = {}
+    wa_rows = []   # (walked_away: bool, feasible: bool) for precision/recall
+
     for sc in scenarios:
         r = user_agent.negotiate(**sc)
-        saving = ((r.list_price - r.final_price) / r.list_price * 100) if r.success else None
+        saving   = ((r.list_price - r.final_price) / r.list_price * 100) if r.success else None
         feasible = sc.get("feasible", True)
+        diff     = sc.get("difficulty", "medium")
+        walked   = _detect_walkaway(r.log)
 
         if not r.success:
             reason = "patience exhausted"
             if r.log:
                 last_line = r.log[-1].lower()
-                if "patience" in last_line:
+                if "patience" in last_line and "exhausted" in last_line:
                     reason = "patience exhausted"
                 elif "budget" in last_line:
                     reason = "budget exceeded"
                 elif "rejected" in last_line:
                     reason = "offer rejected / floor not met"
-                elif "walk away" in last_line:
+                elif walked:
                     reason = "walked away"
             failure_counts[reason] = failure_counts.get(reason, 0) + 1
 
-        rows.append((r.provider, r.success, r.total_reward, r.rounds, saving, r.downgrades, feasible))
+        rows.append((r.provider, r.success, r.total_reward, r.rounds,
+                     saving, r.downgrades, feasible, diff, walked))
+        wa_rows.append((walked, feasible))
 
     user_agent.training_mode = was_training
     user_agent.agent.epsilon = old_eps
@@ -238,16 +307,16 @@ def evaluate_agent(user_agent, scenarios):
             return {
                 "episodes": 0, "success_rate": 0.0, "feasible_ceiling": 0.0,
                 "feasible_success_rate": 0.0, "avg_reward": 0.0, "avg_rounds": 0.0,
-                "avg_savings_pct": 0.0, "tier_kept_pct": 0.0
+                "avg_savings_pct": 0.0, "tier_kept_pct": 0.0,
             }
         savings = [row[4] for row in subset if row[4] is not None]
         ok_rows = [row for row in subset if row[1]]
 
         feasible_subset = [row for row in subset if row[6]]
-        feasible_n = len(feasible_subset)
+        feasible_n  = len(feasible_subset)
         feasible_ok = sum(1 for row in feasible_subset if row[1])
 
-        ceiling = round(feasible_n / n * 100, 1)
+        ceiling     = round(feasible_n / n * 100, 1)
         feasible_sr = round(feasible_ok / feasible_n * 100, 1) if feasible_n > 0 else 0.0
 
         return {
@@ -258,14 +327,22 @@ def evaluate_agent(user_agent, scenarios):
             "avg_reward":            round(sum(row[2] for row in subset) / n, 3),
             "avg_rounds":            round(sum(row[3] for row in subset) / n, 2),
             "avg_savings_pct":       round(sum(savings) / len(savings), 1) if savings else 0.0,
-            "tier_kept_pct":         round(sum(1 for row in ok_rows if row[5] == 0) / len(ok_rows) * 100, 1) if ok_rows else 0.0,
+            "tier_kept_pct":         round(
+                sum(1 for row in ok_rows if row[5] == 0) / len(ok_rows) * 100, 1
+            ) if ok_rows else 0.0,
         }
 
+    by_diff = {d: summarise([row for row in rows if row[7] == d])
+               for d in _DIFFICULTIES}
+
     return {
-        "overall":     summarise(rows),
-        "by_provider": {p: summarise([r for r in rows if r[0] == p]) for p in provider_names()},
-        "failures":    failure_counts,
-        "ceiling":     feasible_rate(scenarios),
+        "overall":            summarise(rows),
+        "by_provider":        {p: summarise([r for r in rows if r[0] == p])
+                               for p in provider_names()},
+        "by_difficulty":      by_diff,
+        "failures":           failure_counts,
+        "ceiling":            feasible_rate(scenarios),
+        "walk_away_accuracy": _walk_away_accuracy(wa_rows),
     }
 
 
