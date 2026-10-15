@@ -93,10 +93,48 @@ in the reward is clipped at the provider's floor.
 
 ## Results
 
-Evaluated greedily on 500 fixed unseen scenarios, after 3,000 training episodes
-(seed 42, 6,000 training episodes). Includes the Auto-selection benchmark. Re-run `python train.py` to reproduce; numbers are in `results/benchmark.md`.
-See the file for the current table — fill it into your report along with
-`results/learning_curves.png`.
+The DQN agent was trained for 2,000 episodes using seed 42 and evaluated on 899 test scenarios.
+
+| Metric | DQN |
+|---|---:|
+| Test success rate | 98.0% |
+| Feasible success rate | 100.0% |
+| Feasible ceiling | 98.0% |
+| Average reward | +5.82 |
+| Average negotiation rounds | 2.43 |
+| Average savings | 17.4% |
+| Tier kept | 80.1% |
+| Training time | 11 seconds |
+
+### Success rate by provider
+
+| Provider | Success rate |
+|---|---:|
+| AWS | 97.7% |
+| GCP | 98.4% |
+| Azure | 97.9% |
+
+### Automatic provider selection
+
+The agent can negotiate with AWS, GCP, and Azure and select the best deal.
+
+| Metric | Result |
+|---|---:|
+| Auto-selection success rate | 99.4% |
+| Single-provider success rate | 98.0% |
+| Tier kept | 95.6% |
+| AWS wins | 0 |
+| GCP wins | 531 |
+| Azure wins | 363 |
+
+These results are from a simulated negotiation environment, not live cloud procurement. The reported results are specific to the experiment configuration and scenario set. See `results/benchmark.md` and `results/learning_curves.png` for the benchmark and learning curve.
+
+Reproduce the experiment using:
+
+```bash
+python train.py --algo dqn --episodes 2000 --eval-episodes 899 --eval-split test --no-curriculum --seed 42
+```
+
 
 ## Data corrections (vs. the data report)
 GCP on-demand for Small ($0.1120 → $0.0335) and Large ($0.2280 → $0.1942),
