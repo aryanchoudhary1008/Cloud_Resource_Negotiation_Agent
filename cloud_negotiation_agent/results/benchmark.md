@@ -1,15 +1,15 @@
 | Algorithm | Success % | Feasible Ceiling % | Feasible Success % | Avg reward | Avg rounds | Avg savings % | Tier kept % | Train time (s) |
 |---|---|---|---|---|---|---|---|---|
-| Q-Learning | 91.5% | 98.0% | 93.4% | +4.85 | 2.04 | 13.6% | 64.8% | 0.7s |
+| DQN | 98.0% | 98.0% | 100.0% | +5.82 | 2.43 | 17.4% | 80.1% | 11.0s |
 
 Success rate by provider:
 
 | Algorithm | AWS | GCP | Azure |
 |---|---|---|---|
-| Q-Learning | 97.0% | 89.5% | 87.9% |
+| DQN | 97.7% | 98.4% | 97.9% |
 
 Auto provider selection (best of AWS / GCP / Azure):
 
 | Algorithm | Success % (auto) | Success % (single provider) | Tier kept % | AWS wins | GCP wins | Azure wins |
 |---|---|---|---|---|---|---|
-| Q-Learning | 97.7% | 91.5% | 82.2% | 40 | 676 | 162 |
+| DQN | 99.4% | 98.0% | 95.6% | 0 | 531 | 363 |
