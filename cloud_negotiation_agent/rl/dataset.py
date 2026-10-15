@@ -83,10 +83,13 @@ def build_dataset(n=6000, seed=7, out_dir=DATA_DIR):
             "feasible": feasible,
         })
 
-    # Step 2: Stratify by (provider, difficulty)
+    # Step 2: Stratify by (provider, difficulty, feasible) — three-dimensional stratification
+    # ensures each split has proportional representation of provider, difficulty, AND feasibility.
+    # Groups smaller than MIN_GROUP_SIZE are assigned entirely to train to avoid empty eval splits.
+    MIN_GROUP_SIZE = 3
     groups = defaultdict(list)
     for row in raw_rows:
-        groups[(row["provider"], row["difficulty"])].append(row)
+        groups[(row["provider"], row["difficulty"], row["feasible"])].append(row)
 
     train_rows, val_rows, test_rows = [], [], []
 
@@ -94,8 +97,19 @@ def build_dataset(n=6000, seed=7, out_dir=DATA_DIR):
         group = groups[group_key]
         rng.shuffle(group)
         g_len = len(group)
+
+        if g_len < MIN_GROUP_SIZE:
+            # Tiny groups go entirely to train to avoid empty splits
+            for row in group:
+                row["split"] = "train"
+                train_rows.append(row)
+            continue
+
         n_train = int(round(g_len * 0.70))
         n_val = int(round(g_len * 0.15))
+        # Ensure at least 1 row in val and test when group is large enough
+        n_train = min(n_train, g_len - 2)
+        n_val   = max(1, min(n_val, g_len - n_train - 1))
 
         for row in group[:n_train]:
             row["split"] = "train"
@@ -171,11 +185,38 @@ def feasible_rate(scenarios):
 def dataset_summary(data_dir=DATA_DIR):
     """
     Summary statistics across train, val, and test splits.
+
+    Returns per-split totals, feasible/infeasible counts and rates,
+    difficulty distribution, and provider distribution.
     """
     summary = {}
     for split in ["train", "val", "test"]:
         file_path = os.path.join(data_dir, f"{split}.csv")
         if not os.path.exists(file_path):
+            build_dataset(out_dir=data_dir)
+        rows = load_split(split, data_dir=data_dir)
+        n = len(rows)
+        diff_counts = defaultdict(int)
+        prov_counts = defaultdict(int)
+        feasible_count = 0
+        for r in rows:
+            diff_counts[r["difficulty"]] += 1
+            prov_counts[r["provider"]] += 1
+            if r["feasible"]:
+                feasible_count += 1
+
+        infeasible_count = n - feasible_count
+        summary[split] = {
+            "total":           n,
+            "feasible_count":  feasible_count,
+            "infeasible_count": infeasible_count,
+            "feasible_rate":   round(feasible_count / n * 100, 1) if n > 0 else 0.0,
+            "infeasible_rate": round(infeasible_count / n * 100, 1) if n > 0 else 0.0,
+            "difficulties":    dict(diff_counts),
+            "providers":       dict(prov_counts),
+        }
+    return summary
+
             build_dataset(out_dir=data_dir)
         rows = load_split(split, data_dir=data_dir)
         n = len(rows)

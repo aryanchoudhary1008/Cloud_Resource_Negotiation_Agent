@@ -74,16 +74,41 @@ def train_agent(user_agent, episodes=500, scenarios=None, val_scenarios=None,
     start = learner.episode_count
     best_val_success = -1.0
 
-    # Categorize curriculum pools for feasible scenarios
-    diff_pools = {"easy": [], "medium": [], "hard": [], "expert": []}
+    # Build per-difficulty dual sub-pools (feasible + infeasible) for curriculum training.
+    # infeasible_ratio controls what fraction of sampled scenarios are infeasible cases;
+    # exposing the agent to unsolvable negotiations teaches it to walk away correctly.
+    infeasible_ratio = 0.15
+    diff_pools = {d: {"feasible": [], "infeasible": []} for d in ["easy", "medium", "hard", "expert"]}
     has_curriculum_pools = False
     if scenarios and curriculum and isinstance(scenarios[0], dict) and "difficulty" in scenarios[0]:
         for sc in scenarios:
-            if sc.get("feasible", True):
-                d = sc.get("difficulty", "medium")
-                if d in diff_pools:
-                    diff_pools[d].append(sc)
-        has_curriculum_pools = any(len(v) > 0 for v in diff_pools.values())
+            d = sc.get("difficulty", "medium")
+            if d in diff_pools:
+                feas_key = "feasible" if sc.get("feasible", True) else "infeasible"
+                diff_pools[d][feas_key].append(sc)
+        has_curriculum_pools = any(
+            len(diff_pools[d]["feasible"]) > 0 or len(diff_pools[d]["infeasible"]) > 0
+            for d in diff_pools
+        )
+
+    def _sample_from_pool(difficulty_keys):
+        """Sample one scenario from the union of requested difficulty pools,
+        respecting infeasible_ratio.  Falls back gracefully for empty sub-pools."""
+        feas_pool = []
+        infeas_pool = []
+        for d in difficulty_keys:
+            feas_pool.extend(diff_pools[d]["feasible"])
+            infeas_pool.extend(diff_pools[d]["infeasible"])
+        if not feas_pool and not infeas_pool:
+            return None
+        if not infeas_pool:
+            return rng.choice(feas_pool)
+        if not feas_pool:
+            return rng.choice(infeas_pool)
+        # Weighted draw: infeasible_ratio of draws come from infeasible pool
+        if rng.random() < infeasible_ratio:
+            return rng.choice(infeas_pool)
+        return rng.choice(feas_pool)
 
     # Adaptive per-episode epsilon decay:
     # Decays smoothly down to min_epsilon by ~60% of total episodes,
@@ -102,13 +127,14 @@ def train_agent(user_agent, episodes=500, scenarios=None, val_scenarios=None,
         # Pick scenario based on curriculum stage or shuffle
         if has_curriculum_pools:
             if progress <= 0.30:
-                active_pool = diff_pools["easy"] + diff_pools["medium"]
+                active_keys = ["easy", "medium"]
             elif progress <= 0.65:
-                active_pool = diff_pools["easy"] + diff_pools["medium"] + diff_pools["hard"]
+                active_keys = ["easy", "medium", "hard"]
             else:
-                active_pool = (diff_pools["easy"] + diff_pools["medium"] +
-                               diff_pools["hard"] + diff_pools["expert"])
-            scenario = rng.choice(active_pool) if active_pool else scenarios[(ep - 1) % len(scenarios)]
+                active_keys = ["easy", "medium", "hard", "expert"]
+            scenario = _sample_from_pool(active_keys)
+            if scenario is None:
+                scenario = scenarios[(ep - 1) % len(scenarios)]
         elif scenarios:
             scenario = scenarios[(ep - 1) % len(scenarios)]
         else:
