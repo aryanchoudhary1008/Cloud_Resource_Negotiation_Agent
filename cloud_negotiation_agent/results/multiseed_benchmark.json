@@ -1,0 +1,1553 @@
+{
+  "eval_episodes": 899,
+  "multiseed": {
+    "seeds": [
+      42,
+      0,
+      1,
+      7,
+      99
+    ],
+    "episodes": 2000,
+    "eval_split": "test",
+    "eval_episodes": 899,
+    "algorithms": {
+      "qlearning": {
+        "seed_results": [
+          {
+            "algorithm": "qlearning",
+            "episodes": 2000,
+            "seed": 42,
+            "train_seconds": 0.7,
+            "knowledge_label": "States in Q-table",
+            "knowledge_size": 682,
+            "history": [
+              {
+                "episode": 100,
+                "avg_reward": 0.6,
+                "success_rate": 59.0,
+                "epsilon": 0.4127,
+                "val_success_rate": null
+              },
+              {
+                "episode": 200,
+                "avg_reward": 2.289,
+                "success_rate": 71.0,
+                "epsilon": 0.3406,
+                "val_success_rate": null
+              },
+              {
+                "episode": 300,
+                "avg_reward": 3.129,
+                "success_rate": 72.0,
+                "epsilon": 0.2812,
+                "val_success_rate": null
+              },
+              {
+                "episode": 400,
+                "avg_reward": 3.557,
+                "success_rate": 76.0,
+                "epsilon": 0.2321,
+                "val_success_rate": 87.2
+              },
+              {
+                "episode": 500,
+                "avg_reward": 4.002,
+                "success_rate": 81.0,
+                "epsilon": 0.1916,
+                "val_success_rate": null
+              },
+              {
+                "episode": 600,
+                "avg_reward": 3.87,
+                "success_rate": 79.0,
+                "epsilon": 0.1581,
+                "val_success_rate": null
+              },
+              {
+                "episode": 700,
+                "avg_reward": 2.906,
+                "success_rate": 75.0,
+                "epsilon": 0.1305,
+                "val_success_rate": null
+              },
+              {
+                "episode": 800,
+                "avg_reward": 1.916,
+                "success_rate": 67.0,
+                "epsilon": 0.1077,
+                "val_success_rate": 84.2
+              },
+              {
+                "episode": 900,
+                "avg_reward": 3.232,
+                "success_rate": 77.0,
+                "epsilon": 0.0889,
+                "val_success_rate": null
+              },
+              {
+                "episode": 1000,
+                "avg_reward": 0.639,
+                "success_rate": 58.0,
+                "epsilon": 0.0734,
+                "val_success_rate": null
+              },
+              {
+                "episode": 1100,
+                "avg_reward": 1.584,
+                "success_rate": 67.0,
+                "epsilon": 0.0606,
+                "val_success_rate": null
+              },
+              {
+                "episode": 1200,
+                "avg_reward": 1.468,
+                "success_rate": 62.0,
+                "epsilon": 0.1,
+                "val_success_rate": 83.9
+              },
+              {
+                "episode": 1300,
+                "avg_reward": 2.371,
+                "success_rate": 73.0,
+                "epsilon": 0.0825,
+                "val_success_rate": null
+              },
+              {
+                "episode": 1400,
+                "avg_reward": 2.403,
+                "success_rate": 73.0,
+                "epsilon": 0.0681,
+                "val_success_rate": null
+              },
+              {
+                "episode": 1500,
+                "avg_reward": 2.349,
+                "success_rate": 73.0,
+                "epsilon": 0.0562,
+                "val_success_rate": null
+              },
+              {
+                "episode": 1600,
+                "avg_reward": 2.686,
+                "success_rate": 79.0,
+                "epsilon": 0.1,
+                "val_success_rate": 85.6
+              },
+              {
+                "episode": 1700,
+                "avg_reward": 1.872,
+                "success_rate": 71.0,
+                "epsilon": 0.0825,
+                "val_success_rate": null
+              },
+              {
+                "episode": 1800,
+                "avg_reward": 3.014,
+                "success_rate": 82.0,
+                "epsilon": 0.0681,
+                "val_success_rate": null
+              },
+              {
+                "episode": 1900,
+                "avg_reward": 2.14,
+                "success_rate": 73.0,
+                "epsilon": 0.0562,
+                "val_success_rate": null
+              },
+              {
+                "episode": 2000,
+                "avg_reward": 2.193,
+                "success_rate": 72.0,
+                "epsilon": 0.1,
+                "val_success_rate": 90.2
+              }
+            ],
+            "evaluation": {
+              "overall": {
+                "episodes": 899,
+                "success_rate": 90.3,
+                "feasible_ceiling": 98.0,
+                "feasible_success_rate": 92.2,
+                "avg_reward": 4.566,
+                "avg_rounds": 2.24,
+                "avg_savings_pct": 15.1,
+                "tier_kept_pct": 64.5
+              },
+              "by_provider": {
+                "AWS": {
+                  "episodes": 304,
+                  "success_rate": 93.1,
+                  "feasible_ceiling": 97.7,
+                  "feasible_success_rate": 95.3,
+                  "avg_reward": 3.455,
+                  "avg_rounds": 2.62,
+                  "avg_savings_pct": 6.1,
+                  "tier_kept_pct": 49.1
+                },
+                "GCP": {
+                  "episodes": 305,
+                  "success_rate": 89.5,
+                  "feasible_ceiling": 98.4,
+                  "feasible_success_rate": 91.0,
+                  "avg_reward": 4.892,
+                  "avg_rounds": 1.89,
+                  "avg_savings_pct": 18.3,
+                  "tier_kept_pct": 65.6
+                },
+                "Azure": {
+                  "episodes": 290,
+                  "success_rate": 88.3,
+                  "feasible_ceiling": 97.9,
+                  "feasible_success_rate": 90.1,
+                  "avg_reward": 5.389,
+                  "avg_rounds": 2.22,
+                  "avg_savings_pct": 21.6,
+                  "tier_kept_pct": 80.5
+                }
+              },
+              "by_difficulty": {
+                "easy": {
+                  "episodes": 269,
+                  "success_rate": 100.0,
+                  "feasible_ceiling": 100.0,
+                  "feasible_success_rate": 100.0,
+                  "avg_reward": 7.267,
+                  "avg_rounds": 1.18,
+                  "avg_savings_pct": 10.4,
+                  "tier_kept_pct": 100.0
+                },
+                "medium": {
+                  "episodes": 277,
+                  "success_rate": 92.1,
+                  "feasible_ceiling": 100.0,
+                  "feasible_success_rate": 92.1,
+                  "avg_reward": 4.47,
+                  "avg_rounds": 2.1,
+                  "avg_savings_pct": 14.2,
+                  "tier_kept_pct": 59.6
+                },
+                "hard": {
+                  "episodes": 223,
+                  "success_rate": 89.7,
+                  "feasible_ceiling": 100.0,
+                  "feasible_success_rate": 89.7,
+                  "avg_reward": 3.417,
+                  "avg_rounds": 3.08,
+                  "avg_savings_pct": 20.4,
+                  "tier_kept_pct": 43.0
+                },
+                "expert": {
+                  "episodes": 130,
+                  "success_rate": 67.7,
+                  "feasible_ceiling": 86.2,
+                  "feasible_success_rate": 78.6,
+                  "avg_reward": 1.154,
+                  "avg_rounds": 3.3,
+                  "avg_savings_pct": 19.8,
+                  "tier_kept_pct": 19.3
+                }
+              },
+              "failures": {
+                "budget exceeded": 70,
+                "walked away": 13,
+                "patience exhausted": 4
+              },
+              "ceiling": 98.0,
+              "walk_away_accuracy": {
+                "correct_walkaway": 1,
+                "missed_opportunity": 12,
+                "missed_refusal": 17,
+                "precision_pct": 7.7,
+                "recall_pct": 5.6
+              }
+            },
+            "auto_selection": {
+              "episodes": 899,
+              "success_rate": 98.7,
+              "own_provider_success_rate": 90.3,
+              "avg_savings_pct": 23.3,
+              "tier_kept_pct": 87.3,
+              "wins": {
+                "AWS": 36,
+                "GCP": 580,
+                "Azure": 271
+              },
+              "ceiling": 98.0
+            }
+          },
+          {
+            "algorithm": "qlearning",
+            "episodes": 2000,
+            "seed": 0,
+            "train_seconds": 0.7,
+            "knowledge_label": "States in Q-table",
+            "knowledge_size": 651,
+            "history": [
+              {
+                "episode": 100,
+                "avg_reward": 1.253,
+                "success_rate": 65.0,
+                "epsilon": 0.4127,
+                "val_success_rate": null
+              },
+              {
+                "episode": 200,
+                "avg_reward": 3.199,
+                "success_rate": 77.0,
+                "epsilon": 0.3406,
+                "val_success_rate": null
+              },
+              {
+                "episode": 300,
+                "avg_reward": 3.611,
+                "success_rate": 80.0,
+                "epsilon": 0.2812,
+                "val_success_rate": null
+              },
+              {
+                "episode": 400,
+                "avg_reward": 3.516,
+                "success_rate": 77.0,
+                "epsilon": 0.2321,
+                "val_success_rate": 87.3
+              },
+              {
+                "episode": 500,
+                "avg_reward": 3.27,
+                "success_rate": 78.0,
+                "epsilon": 0.1916,
+                "val_success_rate": null
+              },
+              {
+                "episode": 600,
+                "avg_reward": 4.979,
+                "success_rate": 88.0,
+                "epsilon": 0.1581,
+                "val_success_rate": null
+              },
+              {
+                "episode": 700,
+                "avg_reward": 1.574,
+                "success_rate": 67.0,
+                "epsilon": 0.1305,
+                "val_success_rate": null
+              },
+              {
+                "episode": 800,
+                "avg_reward": 2.418,
+                "success_rate": 71.0,
+                "epsilon": 0.1077,
+                "val_success_rate": 88.6
+              },
+              {
+                "episode": 900,
+                "avg_reward": 3.433,
+                "success_rate": 79.0,
+                "epsilon": 0.0889,
+                "val_success_rate": null
+              },
+              {
+                "episode": 1000,
+                "avg_reward": 2.999,
+                "success_rate": 78.0,
+                "epsilon": 0.0734,
+                "val_success_rate": null
+              },
+              {
+                "episode": 1100,
+                "avg_reward": 2.53,
+                "success_rate": 74.0,
+                "epsilon": 0.0606,
+                "val_success_rate": null
+              },
+              {
+                "episode": 1200,
+                "avg_reward": 2.429,
+                "success_rate": 73.0,
+                "epsilon": 0.1,
+                "val_success_rate": 84.3
+              },
+              {
+                "episode": 1300,
+                "avg_reward": 2.032,
+                "success_rate": 67.0,
+                "epsilon": 0.0825,
+                "val_success_rate": null
+              },
+              {
+                "episode": 1400,
+                "avg_reward": 2.226,
+                "success_rate": 68.0,
+                "epsilon": 0.0681,
+                "val_success_rate": null
+              },
+              {
+                "episode": 1500,
+                "avg_reward": 2.374,
+                "success_rate": 74.0,
+                "epsilon": 0.0562,
+                "val_success_rate": null
+              },
+              {
+                "episode": 1600,
+                "avg_reward": 1.356,
+                "success_rate": 69.0,
+                "epsilon": 0.1,
+                "val_success_rate": 83.7
+              },
+              {
+                "episode": 1700,
+                "avg_reward": 1.132,
+                "success_rate": 64.0,
+                "epsilon": 0.0825,
+                "val_success_rate": null
+              },
+              {
+                "episode": 1800,
+                "avg_reward": 1.986,
+                "success_rate": 73.0,
+                "epsilon": 0.0681,
+                "val_success_rate": null
+              },
+              {
+                "episode": 1900,
+                "avg_reward": 1.954,
+                "success_rate": 72.0,
+                "epsilon": 0.0562,
+                "val_success_rate": null
+              },
+              {
+                "episode": 2000,
+                "avg_reward": 2.123,
+                "success_rate": 73.0,
+                "epsilon": 0.1,
+                "val_success_rate": 86.3
+              }
+            ],
+            "evaluation": {
+              "overall": {
+                "episodes": 899,
+                "success_rate": 89.4,
+                "feasible_ceiling": 98.0,
+                "feasible_success_rate": 91.3,
+                "avg_reward": 4.304,
+                "avg_rounds": 2.47,
+                "avg_savings_pct": 16.3,
+                "tier_kept_pct": 71.3
+              },
+              "by_provider": {
+                "AWS": {
+                  "episodes": 304,
+                  "success_rate": 95.4,
+                  "feasible_ceiling": 97.7,
+                  "feasible_success_rate": 97.6,
+                  "avg_reward": 3.141,
+                  "avg_rounds": 2.73,
+                  "avg_savings_pct": 6.6,
+                  "tier_kept_pct": 50.3
+                },
+                "GCP": {
+                  "episodes": 305,
+                  "success_rate": 84.3,
+                  "feasible_ceiling": 98.4,
+                  "feasible_success_rate": 85.7,
+                  "avg_reward": 4.811,
+                  "avg_rounds": 2.31,
+                  "avg_savings_pct": 21.6,
+                  "tier_kept_pct": 87.5
+                },
+                "Azure": {
+                  "episodes": 290,
+                  "success_rate": 88.6,
+                  "feasible_ceiling": 97.9,
+                  "feasible_success_rate": 90.5,
+                  "avg_reward": 4.991,
+                  "avg_rounds": 2.37,
+                  "avg_savings_pct": 21.9,
+                  "tier_kept_pct": 78.6
+                }
+              },
+              "by_difficulty": {
+                "easy": {
+                  "episodes": 269,
+                  "success_rate": 100.0,
+                  "feasible_ceiling": 100.0,
+                  "feasible_success_rate": 100.0,
+                  "avg_reward": 7.303,
+                  "avg_rounds": 1.17,
+                  "avg_savings_pct": 10.4,
+                  "tier_kept_pct": 100.0
+                },
+                "medium": {
+                  "episodes": 277,
+                  "success_rate": 87.0,
+                  "feasible_ceiling": 100.0,
+                  "feasible_success_rate": 87.0,
+                  "avg_reward": 4.363,
+                  "avg_rounds": 2.28,
+                  "avg_savings_pct": 17.2,
+                  "tier_kept_pct": 68.9
+                },
+                "hard": {
+                  "episodes": 223,
+                  "success_rate": 94.2,
+                  "feasible_ceiling": 100.0,
+                  "feasible_success_rate": 94.2,
+                  "avg_reward": 3.453,
+                  "avg_rounds": 3.35,
+                  "avg_savings_pct": 20.9,
+                  "tier_kept_pct": 48.6
+                },
+                "expert": {
+                  "episodes": 130,
+                  "success_rate": 64.6,
+                  "feasible_ceiling": 86.2,
+                  "feasible_success_rate": 75.0,
+                  "avg_reward": -0.565,
+                  "avg_rounds": 4.05,
+                  "avg_savings_pct": 21.3,
+                  "tier_kept_pct": 42.9
+                }
+              },
+              "failures": {
+                "budget exceeded": 40,
+                "walked away": 16,
+                "patience exhausted": 39
+              },
+              "ceiling": 98.0,
+              "walk_away_accuracy": {
+                "correct_walkaway": 1,
+                "missed_opportunity": 15,
+                "missed_refusal": 17,
+                "precision_pct": 6.2,
+                "recall_pct": 5.6
+              }
+            },
+            "auto_selection": {
+              "episodes": 899,
+              "success_rate": 97.3,
+              "own_provider_success_rate": 89.4,
+              "avg_savings_pct": 21.2,
+              "tier_kept_pct": 87.7,
+              "wins": {
+                "AWS": 38,
+                "GCP": 650,
+                "Azure": 187
+              },
+              "ceiling": 98.0
+            }
+          },
+          {
+            "algorithm": "qlearning",
+            "episodes": 2000,
+            "seed": 1,
+            "train_seconds": 0.7,
+            "knowledge_label": "States in Q-table",
+            "knowledge_size": 664,
+            "history": [
+              {
+                "episode": 100,
+                "avg_reward": 1.153,
+                "success_rate": 65.0,
+                "epsilon": 0.4127,
+                "val_success_rate": null
+              },
+              {
+                "episode": 200,
+                "avg_reward": 1.65,
+                "success_rate": 66.0,
+                "epsilon": 0.3406,
+                "val_success_rate": null
+              },
+              {
+                "episode": 300,
+                "avg_reward": 2.536,
+                "success_rate": 73.0,
+                "epsilon": 0.2812,
+                "val_success_rate": null
+              },
+              {
+                "episode": 400,
+                "avg_reward": 4.118,
+                "success_rate": 83.0,
+                "epsilon": 0.2321,
+                "val_success_rate": 87.0
+              },
+              {
+                "episode": 500,
+                "avg_reward": 4.473,
+                "success_rate": 83.0,
+                "epsilon": 0.1916,
+                "val_success_rate": null
+              },
+              {
+                "episode": 600,
+                "avg_reward": 3.853,
+                "success_rate": 80.0,
+                "epsilon": 0.1581,
+                "val_success_rate": null
+              },
+              {
+                "episode": 700,
+                "avg_reward": 1.45,
+                "success_rate": 64.0,
+                "epsilon": 0.1305,
+                "val_success_rate": null
+              },
+              {
+                "episode": 800,
+                "avg_reward": 1.425,
+                "success_rate": 63.0,
+                "epsilon": 0.1077,
+                "val_success_rate": 82.3
+              },
+              {
+                "episode": 900,
+                "avg_reward": 2.764,
+                "success_rate": 71.0,
+                "epsilon": 0.0889,
+                "val_success_rate": null
+              },
+              {
+                "episode": 1000,
+                "avg_reward": 1.585,
+                "success_rate": 63.0,
+                "epsilon": 0.0734,
+                "val_success_rate": null
+              },
+              {
+                "episode": 1100,
+                "avg_reward": 2.475,
+                "success_rate": 74.0,
+                "epsilon": 0.0606,
+                "val_success_rate": null
+              },
+              {
+                "episode": 1200,
+                "avg_reward": 2.271,
+                "success_rate": 69.0,
+                "epsilon": 0.1,
+                "val_success_rate": 80.3
+              },
+              {
+                "episode": 1300,
+                "avg_reward": 2.124,
+                "success_rate": 68.0,
+                "epsilon": 0.0825,
+                "val_success_rate": null
+              },
+              {
+                "episode": 1400,
+                "avg_reward": 1.194,
+                "success_rate": 65.0,
+                "epsilon": 0.0681,
+                "val_success_rate": null
+              },
+              {
+                "episode": 1500,
+                "avg_reward": 2.579,
+                "success_rate": 75.0,
+                "epsilon": 0.0562,
+                "val_success_rate": null
+              },
+              {
+                "episode": 1600,
+                "avg_reward": 3.419,
+                "success_rate": 77.0,
+                "epsilon": 0.1,
+                "val_success_rate": 88.7
+              },
+              {
+                "episode": 1700,
+                "avg_reward": 2.803,
+                "success_rate": 77.0,
+                "epsilon": 0.0825,
+                "val_success_rate": null
+              },
+              {
+                "episode": 1800,
+                "avg_reward": 1.678,
+                "success_rate": 67.0,
+                "epsilon": 0.0681,
+                "val_success_rate": null
+              },
+              {
+                "episode": 1900,
+                "avg_reward": 2.592,
+                "success_rate": 75.0,
+                "epsilon": 0.0562,
+                "val_success_rate": null
+              },
+              {
+                "episode": 2000,
+                "avg_reward": 3.125,
+                "success_rate": 77.0,
+                "epsilon": 0.1,
+                "val_success_rate": 88.6
+              }
+            ],
+            "evaluation": {
+              "overall": {
+                "episodes": 899,
+                "success_rate": 89.5,
+                "feasible_ceiling": 98.0,
+                "feasible_success_rate": 91.4,
+                "avg_reward": 4.505,
+                "avg_rounds": 2.28,
+                "avg_savings_pct": 14.9,
+                "tier_kept_pct": 67.0
+              },
+              "by_provider": {
+                "AWS": {
+                  "episodes": 304,
+                  "success_rate": 88.8,
+                  "feasible_ceiling": 97.7,
+                  "feasible_success_rate": 90.9,
+                  "avg_reward": 3.001,
+                  "avg_rounds": 2.65,
+                  "avg_savings_pct": 5.7,
+                  "tier_kept_pct": 50.7
+                },
+                "GCP": {
+                  "episodes": 305,
+                  "success_rate": 91.8,
+                  "feasible_ceiling": 98.4,
+                  "feasible_success_rate": 93.3,
+                  "avg_reward": 5.255,
+                  "avg_rounds": 1.88,
+                  "avg_savings_pct": 18.1,
+                  "tier_kept_pct": 66.1
+                },
+                "Azure": {
+                  "episodes": 290,
+                  "success_rate": 87.9,
+                  "feasible_ceiling": 97.9,
+                  "feasible_success_rate": 89.8,
+                  "avg_reward": 5.292,
+                  "avg_rounds": 2.3,
+                  "avg_savings_pct": 21.1,
+                  "tier_kept_pct": 85.1
+                }
+              },
+              "by_difficulty": {
+                "easy": {
+                  "episodes": 269,
+                  "success_rate": 100.0,
+                  "feasible_ceiling": 100.0,
+                  "feasible_success_rate": 100.0,
+                  "avg_reward": 7.195,
+                  "avg_rounds": 1.04,
+                  "avg_savings_pct": 9.2,
+                  "tier_kept_pct": 98.1
+                },
+                "medium": {
+                  "episodes": 277,
+                  "success_rate": 89.9,
+                  "feasible_ceiling": 100.0,
+                  "feasible_success_rate": 89.9,
+                  "avg_reward": 4.664,
+                  "avg_rounds": 2.17,
+                  "avg_savings_pct": 15.7,
+                  "tier_kept_pct": 70.3
+                },
+                "hard": {
+                  "episodes": 223,
+                  "success_rate": 89.2,
+                  "feasible_ceiling": 100.0,
+                  "feasible_success_rate": 89.2,
+                  "avg_reward": 3.228,
+                  "avg_rounds": 3.2,
+                  "avg_savings_pct": 20.0,
+                  "tier_kept_pct": 42.2
+                },
+                "expert": {
+                  "episodes": 130,
+                  "success_rate": 67.7,
+                  "feasible_ceiling": 86.2,
+                  "feasible_success_rate": 78.6,
+                  "avg_reward": 0.791,
+                  "avg_rounds": 3.47,
+                  "avg_savings_pct": 18.9,
+                  "tier_kept_pct": 18.2
+                }
+              },
+              "failures": {
+                "budget exceeded": 63,
+                "walked away": 21,
+                "patience exhausted": 10
+              },
+              "ceiling": 98.0,
+              "walk_away_accuracy": {
+                "correct_walkaway": 4,
+                "missed_opportunity": 17,
+                "missed_refusal": 14,
+                "precision_pct": 19.0,
+                "recall_pct": 22.2
+              }
+            },
+            "auto_selection": {
+              "episodes": 899,
+              "success_rate": 96.7,
+              "own_provider_success_rate": 89.5,
+              "avg_savings_pct": 21.4,
+              "tier_kept_pct": 90.0,
+              "wins": {
+                "AWS": 33,
+                "GCP": 596,
+                "Azure": 240
+              },
+              "ceiling": 98.0
+            }
+          },
+          {
+            "algorithm": "qlearning",
+            "episodes": 2000,
+            "seed": 7,
+            "train_seconds": 0.8,
+            "knowledge_label": "States in Q-table",
+            "knowledge_size": 671,
+            "history": [
+              {
+                "episode": 100,
+                "avg_reward": -0.436,
+                "success_rate": 53.0,
+                "epsilon": 0.4127,
+                "val_success_rate": null
+              },
+              {
+                "episode": 200,
+                "avg_reward": 2.503,
+                "success_rate": 71.0,
+                "epsilon": 0.3406,
+                "val_success_rate": null
+              },
+              {
+                "episode": 300,
+                "avg_reward": 2.895,
+                "success_rate": 74.0,
+                "epsilon": 0.2812,
+                "val_success_rate": null
+              },
+              {
+                "episode": 400,
+                "avg_reward": 3.864,
+                "success_rate": 78.0,
+                "epsilon": 0.2321,
+                "val_success_rate": 87.9
+              },
+              {
+                "episode": 500,
+                "avg_reward": 5.092,
+                "success_rate": 88.0,
+                "epsilon": 0.1916,
+                "val_success_rate": null
+              },
+              {
+                "episode": 600,
+                "avg_reward": 4.608,
+                "success_rate": 86.0,
+                "epsilon": 0.1581,
+                "val_success_rate": null
+              },
+              {
+                "episode": 700,
+                "avg_reward": 1.088,
+                "success_rate": 58.0,
+                "epsilon": 0.1305,
+                "val_success_rate": null
+              },
+              {
+                "episode": 800,
+                "avg_reward": 2.373,
+                "success_rate": 69.0,
+                "epsilon": 0.1077,
+                "val_success_rate": 85.4
+              },
+              {
+                "episode": 900,
+                "avg_reward": 2.273,
+                "success_rate": 71.0,
+                "epsilon": 0.0889,
+                "val_success_rate": null
+              },
+              {
+                "episode": 1000,
+                "avg_reward": 2.425,
+                "success_rate": 72.0,
+                "epsilon": 0.0734,
+                "val_success_rate": null
+              },
+              {
+                "episode": 1100,
+                "avg_reward": 1.745,
+                "success_rate": 64.0,
+                "epsilon": 0.0606,
+                "val_success_rate": null
+              },
+              {
+                "episode": 1200,
+                "avg_reward": 3.193,
+                "success_rate": 76.0,
+                "epsilon": 0.1,
+                "val_success_rate": 85.1
+              },
+              {
+                "episode": 1300,
+                "avg_reward": 2.166,
+                "success_rate": 72.0,
+                "epsilon": 0.0825,
+                "val_success_rate": null
+              },
+              {
+                "episode": 1400,
+                "avg_reward": 1.773,
+                "success_rate": 69.0,
+                "epsilon": 0.0681,
+                "val_success_rate": null
+              },
+              {
+                "episode": 1500,
+                "avg_reward": 2.095,
+                "success_rate": 69.0,
+                "epsilon": 0.0562,
+                "val_success_rate": null
+              },
+              {
+                "episode": 1600,
+                "avg_reward": 1.317,
+                "success_rate": 64.0,
+                "epsilon": 0.1,
+                "val_success_rate": 87.7
+              },
+              {
+                "episode": 1700,
+                "avg_reward": 2.206,
+                "success_rate": 72.0,
+                "epsilon": 0.0825,
+                "val_success_rate": null
+              },
+              {
+                "episode": 1800,
+                "avg_reward": 1.536,
+                "success_rate": 66.0,
+                "epsilon": 0.0681,
+                "val_success_rate": null
+              },
+              {
+                "episode": 1900,
+                "avg_reward": 1.982,
+                "success_rate": 70.0,
+                "epsilon": 0.0562,
+                "val_success_rate": null
+              },
+              {
+                "episode": 2000,
+                "avg_reward": 3.404,
+                "success_rate": 80.0,
+                "epsilon": 0.1,
+                "val_success_rate": 84.2
+              }
+            ],
+            "evaluation": {
+              "overall": {
+                "episodes": 899,
+                "success_rate": 87.8,
+                "feasible_ceiling": 98.0,
+                "feasible_success_rate": 89.6,
+                "avg_reward": 4.264,
+                "avg_rounds": 2.31,
+                "avg_savings_pct": 14.4,
+                "tier_kept_pct": 66.5
+              },
+              "by_provider": {
+                "AWS": {
+                  "episodes": 304,
+                  "success_rate": 95.4,
+                  "feasible_ceiling": 97.7,
+                  "feasible_success_rate": 97.6,
+                  "avg_reward": 3.646,
+                  "avg_rounds": 2.84,
+                  "avg_savings_pct": 6.6,
+                  "tier_kept_pct": 50.3
+                },
+                "GCP": {
+                  "episodes": 305,
+                  "success_rate": 89.2,
+                  "feasible_ceiling": 98.4,
+                  "feasible_success_rate": 90.7,
+                  "avg_reward": 5.063,
+                  "avg_rounds": 1.98,
+                  "avg_savings_pct": 17.9,
+                  "tier_kept_pct": 73.2
+                },
+                "Azure": {
+                  "episodes": 290,
+                  "success_rate": 78.3,
+                  "feasible_ceiling": 97.9,
+                  "feasible_success_rate": 79.9,
+                  "avg_reward": 4.072,
+                  "avg_rounds": 2.1,
+                  "avg_savings_pct": 20.2,
+                  "tier_kept_pct": 79.3
+                }
+              },
+              "by_difficulty": {
+                "easy": {
+                  "episodes": 269,
+                  "success_rate": 100.0,
+                  "feasible_ceiling": 100.0,
+                  "feasible_success_rate": 100.0,
+                  "avg_reward": 7.305,
+                  "avg_rounds": 1.19,
+                  "avg_savings_pct": 10.6,
+                  "tier_kept_pct": 100.0
+                },
+                "medium": {
+                  "episodes": 277,
+                  "success_rate": 89.9,
+                  "feasible_ceiling": 100.0,
+                  "feasible_success_rate": 89.9,
+                  "avg_reward": 4.477,
+                  "avg_rounds": 2.06,
+                  "avg_savings_pct": 14.1,
+                  "tier_kept_pct": 66.3
+                },
+                "hard": {
+                  "episodes": 223,
+                  "success_rate": 78.9,
+                  "feasible_ceiling": 100.0,
+                  "feasible_success_rate": 78.9,
+                  "avg_reward": 1.976,
+                  "avg_rounds": 3.23,
+                  "avg_savings_pct": 18.6,
+                  "tier_kept_pct": 39.8
+                },
+                "expert": {
+                  "episodes": 130,
+                  "success_rate": 73.1,
+                  "feasible_ceiling": 86.2,
+                  "feasible_success_rate": 84.8,
+                  "avg_reward": 1.443,
+                  "avg_rounds": 3.56,
+                  "avg_savings_pct": 18.2,
+                  "tier_kept_pct": 22.1
+                }
+              },
+              "failures": {
+                "budget exceeded": 81,
+                "patience exhausted": 10,
+                "walked away": 19
+              },
+              "ceiling": 98.0,
+              "walk_away_accuracy": {
+                "correct_walkaway": 4,
+                "missed_opportunity": 15,
+                "missed_refusal": 14,
+                "precision_pct": 21.1,
+                "recall_pct": 22.2
+              }
+            },
+            "auto_selection": {
+              "episodes": 899,
+              "success_rate": 97.1,
+              "own_provider_success_rate": 87.8,
+              "avg_savings_pct": 19.7,
+              "tier_kept_pct": 85.6,
+              "wins": {
+                "AWS": 35,
+                "GCP": 677,
+                "Azure": 161
+              },
+              "ceiling": 98.0
+            }
+          },
+          {
+            "algorithm": "qlearning",
+            "episodes": 2000,
+            "seed": 99,
+            "train_seconds": 0.6,
+            "knowledge_label": "States in Q-table",
+            "knowledge_size": 680,
+            "history": [
+              {
+                "episode": 100,
+                "avg_reward": 0.911,
+                "success_rate": 64.0,
+                "epsilon": 0.4127,
+                "val_success_rate": null
+              },
+              {
+                "episode": 200,
+                "avg_reward": 2.8,
+                "success_rate": 72.0,
+                "epsilon": 0.3406,
+                "val_success_rate": null
+              },
+              {
+                "episode": 300,
+                "avg_reward": 3.255,
+                "success_rate": 78.0,
+                "epsilon": 0.2812,
+                "val_success_rate": null
+              },
+              {
+                "episode": 400,
+                "avg_reward": 4.138,
+                "success_rate": 83.0,
+                "epsilon": 0.2321,
+                "val_success_rate": 87.9
+              },
+              {
+                "episode": 500,
+                "avg_reward": 5.172,
+                "success_rate": 90.0,
+                "epsilon": 0.1916,
+                "val_success_rate": null
+              },
+              {
+                "episode": 600,
+                "avg_reward": 4.557,
+                "success_rate": 85.0,
+                "epsilon": 0.1581,
+                "val_success_rate": null
+              },
+              {
+                "episode": 700,
+                "avg_reward": 2.595,
+                "success_rate": 72.0,
+                "epsilon": 0.1305,
+                "val_success_rate": null
+              },
+              {
+                "episode": 800,
+                "avg_reward": 2.992,
+                "success_rate": 77.0,
+                "epsilon": 0.1077,
+                "val_success_rate": 83.7
+              },
+              {
+                "episode": 900,
+                "avg_reward": 2.384,
+                "success_rate": 69.0,
+                "epsilon": 0.0889,
+                "val_success_rate": null
+              },
+              {
+                "episode": 1000,
+                "avg_reward": 2.493,
+                "success_rate": 69.0,
+                "epsilon": 0.0734,
+                "val_success_rate": null
+              },
+              {
+                "episode": 1100,
+                "avg_reward": 1.327,
+                "success_rate": 66.0,
+                "epsilon": 0.0606,
+                "val_success_rate": null
+              },
+              {
+                "episode": 1200,
+                "avg_reward": 2.579,
+                "success_rate": 73.0,
+                "epsilon": 0.1,
+                "val_success_rate": 84.0
+              },
+              {
+                "episode": 1300,
+                "avg_reward": 1.667,
+                "success_rate": 63.0,
+                "epsilon": 0.0825,
+                "val_success_rate": null
+              },
+              {
+                "episode": 1400,
+                "avg_reward": 2.04,
+                "success_rate": 68.0,
+                "epsilon": 0.0681,
+                "val_success_rate": null
+              },
+              {
+                "episode": 1500,
+                "avg_reward": 2.523,
+                "success_rate": 74.0,
+                "epsilon": 0.0562,
+                "val_success_rate": null
+              },
+              {
+                "episode": 1600,
+                "avg_reward": 0.953,
+                "success_rate": 66.0,
+                "epsilon": 0.1,
+                "val_success_rate": 83.6
+              },
+              {
+                "episode": 1700,
+                "avg_reward": 1.735,
+                "success_rate": 68.0,
+                "epsilon": 0.0825,
+                "val_success_rate": null
+              },
+              {
+                "episode": 1800,
+                "avg_reward": 2.531,
+                "success_rate": 76.0,
+                "epsilon": 0.0681,
+                "val_success_rate": null
+              },
+              {
+                "episode": 1900,
+                "avg_reward": 1.945,
+                "success_rate": 68.0,
+                "epsilon": 0.0562,
+                "val_success_rate": null
+              },
+              {
+                "episode": 2000,
+                "avg_reward": 1.703,
+                "success_rate": 66.0,
+                "epsilon": 0.1,
+                "val_success_rate": 86.0
+              }
+            ],
+            "evaluation": {
+              "overall": {
+                "episodes": 899,
+                "success_rate": 86.8,
+                "feasible_ceiling": 98.0,
+                "feasible_success_rate": 88.5,
+                "avg_reward": 4.078,
+                "avg_rounds": 2.19,
+                "avg_savings_pct": 14.0,
+                "tier_kept_pct": 64.7
+              },
+              "by_provider": {
+                "AWS": {
+                  "episodes": 304,
+                  "success_rate": 90.5,
+                  "feasible_ceiling": 97.7,
+                  "feasible_success_rate": 92.6,
+                  "avg_reward": 2.917,
+                  "avg_rounds": 2.76,
+                  "avg_savings_pct": 5.7,
+                  "tier_kept_pct": 47.6
+                },
+                "GCP": {
+                  "episodes": 305,
+                  "success_rate": 85.2,
+                  "feasible_ceiling": 98.4,
+                  "feasible_success_rate": 86.7,
+                  "avg_reward": 4.635,
+                  "avg_rounds": 1.79,
+                  "avg_savings_pct": 18.4,
+                  "tier_kept_pct": 70.4
+                },
+                "Azure": {
+                  "episodes": 290,
+                  "success_rate": 84.5,
+                  "feasible_ceiling": 97.9,
+                  "feasible_success_rate": 86.3,
+                  "avg_reward": 4.709,
+                  "avg_rounds": 2.01,
+                  "avg_savings_pct": 18.6,
+                  "tier_kept_pct": 78.0
+                }
+              },
+              "by_difficulty": {
+                "easy": {
+                  "episodes": 269,
+                  "success_rate": 100.0,
+                  "feasible_ceiling": 100.0,
+                  "feasible_success_rate": 100.0,
+                  "avg_reward": 7.295,
+                  "avg_rounds": 1.12,
+                  "avg_savings_pct": 9.9,
+                  "tier_kept_pct": 100.0
+                },
+                "medium": {
+                  "episodes": 277,
+                  "success_rate": 87.4,
+                  "feasible_ceiling": 100.0,
+                  "feasible_success_rate": 87.4,
+                  "avg_reward": 4.208,
+                  "avg_rounds": 2.04,
+                  "avg_savings_pct": 13.9,
+                  "tier_kept_pct": 67.8
+                },
+                "hard": {
+                  "episodes": 223,
+                  "success_rate": 82.5,
+                  "feasible_ceiling": 100.0,
+                  "feasible_success_rate": 82.5,
+                  "avg_reward": 2.057,
+                  "avg_rounds": 3.09,
+                  "avg_savings_pct": 18.3,
+                  "tier_kept_pct": 33.7
+                },
+                "expert": {
+                  "episodes": 130,
+                  "success_rate": 65.4,
+                  "feasible_ceiling": 86.2,
+                  "feasible_success_rate": 75.9,
+                  "avg_reward": 0.612,
+                  "avg_rounds": 3.2,
+                  "avg_savings_pct": 18.0,
+                  "tier_kept_pct": 11.8
+                }
+              },
+              "failures": {
+                "budget exceeded": 57,
+                "walked away": 55,
+                "patience exhausted": 7
+              },
+              "ceiling": 98.0,
+              "walk_away_accuracy": {
+                "correct_walkaway": 5,
+                "missed_opportunity": 50,
+                "missed_refusal": 13,
+                "precision_pct": 9.1,
+                "recall_pct": 27.8
+              }
+            },
+            "auto_selection": {
+              "episodes": 899,
+              "success_rate": 96.1,
+              "own_provider_success_rate": 86.8,
+              "avg_savings_pct": 20.1,
+              "tier_kept_pct": 81.9,
+              "wins": {
+                "AWS": 21,
+                "GCP": 697,
+                "Azure": 146
+              },
+              "ceiling": 98.0
+            }
+          }
+        ],
+        "aggregated": {
+          "success_rate": {
+            "mean": 88.76,
+            "std": 1.42,
+            "values": [
+              90.3,
+              89.4,
+              89.5,
+              87.8,
+              86.8
+            ]
+          },
+          "feasible_success_rate": {
+            "mean": 90.6,
+            "std": 1.51,
+            "values": [
+              92.2,
+              91.3,
+              91.4,
+              89.6,
+              88.5
+            ]
+          },
+          "avg_reward": {
+            "mean": 4.34,
+            "std": 0.2,
+            "values": [
+              4.566,
+              4.304,
+              4.505,
+              4.264,
+              4.078
+            ]
+          },
+          "avg_rounds": {
+            "mean": 2.3,
+            "std": 0.11,
+            "values": [
+              2.24,
+              2.47,
+              2.28,
+              2.31,
+              2.19
+            ]
+          },
+          "avg_savings_pct": {
+            "mean": 14.94,
+            "std": 0.87,
+            "values": [
+              15.1,
+              16.3,
+              14.9,
+              14.4,
+              14.0
+            ]
+          },
+          "tier_kept_pct": {
+            "mean": 66.8,
+            "std": 2.74,
+            "values": [
+              64.5,
+              71.3,
+              67.0,
+              66.5,
+              64.7
+            ]
+          },
+          "auto_success_rate": {
+            "mean": 97.18,
+            "std": 0.97,
+            "values": [
+              98.7,
+              97.3,
+              96.7,
+              97.1,
+              96.1
+            ]
+          },
+          "train_seconds": {
+            "mean": 0.7,
+            "std": 0.07,
+            "values": [
+              0.7,
+              0.7,
+              0.7,
+              0.8,
+              0.6
+            ]
+          },
+          "walkaway_precision": {
+            "mean": 12.62,
+            "std": 6.9,
+            "values": [
+              7.7,
+              6.2,
+              19.0,
+              21.1,
+              9.1
+            ]
+          },
+          "walkaway_recall": {
+            "mean": 16.68,
+            "std": 10.37,
+            "values": [
+              5.6,
+              5.6,
+              22.2,
+              22.2,
+              27.8
+            ]
+          },
+          "provider_AWS_success": {
+            "mean": 92.64,
+            "std": 2.95,
+            "values": [
+              93.1,
+              95.4,
+              88.8,
+              95.4,
+              90.5
+            ]
+          },
+          "provider_AWS_savings": {
+            "mean": 6.14,
+            "std": 0.45,
+            "values": [
+              6.1,
+              6.6,
+              5.7,
+              6.6,
+              5.7
+            ]
+          },
+          "provider_GCP_success": {
+            "mean": 88.0,
+            "std": 3.15,
+            "values": [
+              89.5,
+              84.3,
+              91.8,
+              89.2,
+              85.2
+            ]
+          },
+          "provider_GCP_savings": {
+            "mean": 18.86,
+            "std": 1.54,
+            "values": [
+              18.3,
+              21.6,
+              18.1,
+              17.9,
+              18.4
+            ]
+          },
+          "provider_Azure_success": {
+            "mean": 85.52,
+            "std": 4.36,
+            "values": [
+              88.3,
+              88.6,
+              87.9,
+              78.3,
+              84.5
+            ]
+          },
+          "provider_Azure_savings": {
+            "mean": 20.68,
+            "std": 1.33,
+            "values": [
+              21.6,
+              21.9,
+              21.1,
+              20.2,
+              18.6
+            ]
+          },
+          "diff_easy_success": {
+            "mean": 100.0,
+            "std": 0.0,
+            "values": [
+              100.0,
+              100.0,
+              100.0,
+              100.0,
+              100.0
+            ]
+          },
+          "diff_medium_success": {
+            "mean": 89.26,
+            "std": 2.09,
+            "values": [
+              92.1,
+              87.0,
+              89.9,
+              89.9,
+              87.4
+            ]
+          },
+          "diff_hard_success": {
+            "mean": 86.9,
+            "std": 6.12,
+            "values": [
+              89.7,
+              94.2,
+              89.2,
+              78.9,
+              82.5
+            ]
+          },
+          "diff_expert_success": {
+            "mean": 67.7,
+            "std": 3.32,
+            "values": [
+              67.7,
+              64.6,
+              67.7,
+              73.1,
+              65.4
+            ]
+          }
+        }
+      }
+    }
+  }
+}
