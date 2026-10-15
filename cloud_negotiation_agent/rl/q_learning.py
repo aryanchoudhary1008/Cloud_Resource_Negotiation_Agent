@@ -40,24 +40,40 @@ class QLearningAgent:
 
     # ── Action selection ─────────────────────────────────────────────
 
-    def choose_action(self, state):
-        """ε-greedy: random action with probability ε, otherwise argmax Q(state, ·)."""
+    def choose_action(self, state, legal_actions=None):
+        """ε-greedy: random action with probability ε, otherwise argmax Q(state, ·) over legal actions."""
+        if legal_actions is None:
+            legal_actions = list(range(self.NUM_ACTIONS))
+        elif not isinstance(legal_actions, (list, tuple)):
+            legal_actions = list(legal_actions)
+
+        if not legal_actions:
+            legal_actions = list(range(self.NUM_ACTIONS))
+
         if np.random.random() < self.epsilon:
-            return np.random.randint(self.NUM_ACTIONS)
-        return int(np.argmax(self.q_table[state]))
+            return int(np.random.choice(legal_actions))
+
+        # Argmax among legal actions
+        q = self.q_table[state]
+        best_action = max(legal_actions, key=lambda a: q[a])
+        return int(best_action)
 
     def q_values(self, state):
         return self.q_table[state].copy()
 
     # ── Learning ─────────────────────────────────────────────────────
 
-    def update(self, state, action, reward, next_state, done=False):
-        """One Bellman update of Q(state, action)."""
+    def update(self, state, action, reward, next_state, done=False, next_legal_actions=None):
+        """One Bellman update of Q(state, action) considering next_legal_actions."""
         current_q = self.q_table[state][action]
         if done:
             td_target = reward
         else:
-            td_target = reward + self.gamma * np.max(self.q_table[next_state])
+            if next_legal_actions is not None and len(next_legal_actions) > 0:
+                max_next_q = max(self.q_table[next_state][a] for a in next_legal_actions)
+            else:
+                max_next_q = np.max(self.q_table[next_state])
+            td_target = reward + self.gamma * max_next_q
         self.q_table[state][action] += self.alpha * (td_target - current_q)
 
     def decay_epsilon(self, decay_rate=0.995, min_epsilon=0.05):

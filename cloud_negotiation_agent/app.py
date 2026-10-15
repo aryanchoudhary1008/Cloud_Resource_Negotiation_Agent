@@ -220,26 +220,38 @@ def train():
     history = train_agent(trainer, episodes, batch=max(1, episodes // 10), verbose=False)
     trainer.save()
 
-    # refresh the shared inference agent
+    # Refresh the shared inference agent
     if algorithm in _agents:
         _agents[algorithm].reload()
 
-    # Measure performance from the converged exploitation phase (final half of training)
-    # so the dashboard reflects the trained policy rather than initial exploratory random actions
+    # Measure training-phase performance from the converged exploitation phase (final half of training)
     converged = history[len(history) // 2:] if len(history) >= 2 else history
-    success_rate = round(sum(h["success_rate"] for h in converged) / len(converged), 1)
-    avg_reward   = round(sum(h["avg_reward"] for h in converged) / len(converged), 3)
+    training_success_rate = round(sum(h["success_rate"] for h in converged) / len(converged), 1)
+    training_avg_reward   = round(sum(h["avg_reward"] for h in converged) / len(converged), 3)
+
+    # Perform separate greedy evaluation on the fixed validation split
+    val_scenarios = load_split("val")
+    val_eval = evaluate_agent(trainer, val_scenarios)
+    val_overall = val_eval["overall"]
+    eval_success_rate = val_overall["success_rate"]
+    eval_feasible_success_rate = val_overall["feasible_success_rate"]
+    eval_avg_reward = val_overall["avg_reward"]
 
     return jsonify({
-        "algorithm":       algorithm,
-        "episodes_trained": episodes,
-        "success_rate":    success_rate,
-        "avg_reward":      avg_reward,
-        "knowledge_size":  trainer.agent.knowledge_size,
-        "knowledge_label": trainer.agent.knowledge_label,
-        "current_epsilon": round(trainer.agent.epsilon, 4),
-        "total_episodes":  trainer.agent.episode_count,
-        "seconds":         round(time.time() - start, 1),
+        "algorithm":                  algorithm,
+        "episodes_trained":           episodes,               # episodes trained in this request
+        "total_episodes":             trainer.agent.episode_count,  # cumulative lifetime episodes
+        "training_success_rate":      training_success_rate,  # final-half training exploration/exploitation success
+        "training_avg_reward":        training_avg_reward,
+        "eval_success_rate":          eval_success_rate,      # greedy policy on validation set
+        "eval_feasible_success_rate": eval_feasible_success_rate,
+        "eval_avg_reward":            eval_avg_reward,
+        "success_rate":               eval_success_rate,      # default display metric for backward-compatibility
+        "avg_reward":                 eval_avg_reward,
+        "knowledge_size":             trainer.agent.knowledge_size,
+        "knowledge_label":            trainer.agent.knowledge_label,
+        "current_epsilon":            round(trainer.agent.epsilon, 4),
+        "seconds":                    round(time.time() - start, 1),
     })
 
 

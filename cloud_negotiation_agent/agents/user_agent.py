@@ -121,23 +121,39 @@ class UserAgent:
 
     # ── Public API ───────────────────────────────────────────────────
 
+    def legal_actions(self, obs):
+        """
+        Return the list of valid actions for observation `obs`.
+        Enforces hard budget constraint: ACCEPT (action 2) is illegal if offer > budget.
+        """
+        from rl.environment import NUM_ACTIONS, ACCEPT
+        actions = list(range(NUM_ACTIONS))
+        if obs["offer"] > obs["budget"]:
+            actions.remove(ACCEPT)
+        return actions
+
     def negotiate(self, provider, tier, quantity, budget, max_rounds=None, **kwargs):
         """
         Run one full negotiation and return a NegotiationResult.
 
-        Each round: observe → encode state → choose action → env.step() →
+        Each round: observe → encode state → choose action (among legal actions) → env.step() →
         (training only) learn from the transition.
         """
         obs = self.env.reset(provider, tier, quantity, budget, max_rounds=max_rounds)
         done = False
 
         while not done:
-            state  = self.encode(obs)
-            action = self.agent.choose_action(state)
+            state = self.encode(obs)
+            legals = self.legal_actions(obs)
+            action = self.agent.choose_action(state, legal_actions=legals)
             next_obs, reward, done, _ = self.env.step(action)
 
             if self.training_mode:
-                self.agent.update(state, action, reward, self.encode(next_obs), done)
+                next_legals = self.legal_actions(next_obs) if not done else None
+                try:
+                    self.agent.update(state, action, reward, self.encode(next_obs), done, next_legal_actions=next_legals)
+                except TypeError:
+                    self.agent.update(state, action, reward, self.encode(next_obs), done)
             obs = next_obs
 
         return NegotiationResult(self.env, self.algorithm)

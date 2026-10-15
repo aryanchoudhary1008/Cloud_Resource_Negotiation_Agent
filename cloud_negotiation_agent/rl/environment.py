@@ -51,6 +51,7 @@ DOWNGRADE_COST  = 1.5
 FAILURE_PENALTY = -5.0
 LOWBALL_PENALTY = -1.0
 UNNECESSARY_DOWNGRADE_PENALTY = -3.0
+JUSTIFIED_WALKAWAY_REWARD = 1.0     # reward bonus for correctly refusing an infeasible deal
 
 # Bidding constants
 INITIAL_BID_RATIO = 0.50     # opening bid = 50 % of list price (capped at budget)
@@ -239,10 +240,22 @@ class NegotiationEnv:
                 f"  Accepted ${self.offer:,.2f} but it exceeds budget ${self.budget:,.2f}")
             return self._fail(reward, info, "accepted an over-budget offer")
 
-        # ── 3: walk away ─────────────────────────────────────────────
+# ── 3: walk away ─────────────────────────────────────────────
         else:
             self.log.append("  Negotiation ended by agent. No deal.")
-            return self._fail(reward, info, "agent walked away")
+            tiers = tier_names()
+            curr_idx = tiers.index(self.tier)
+            can_deal = any(self._feasible(t) for t in tiers[:curr_idx + 1])
+            if can_deal:
+                # Abandoned a deal that was still mathematically achievable
+                return self._fail(reward, info, "agent walked away (deal was feasible)")
+            else:
+                # Justified refusal of an impossible negotiation
+                justified_reward = reward + JUSTIFIED_WALKAWAY_REWARD
+                self.done, self.success, self.final_price = True, False, 0.0
+                self.total_reward += justified_reward
+                info.update(success=False, final_price=0.0, rounds=self.round_num, reason="agent walked away (justified)")
+                return self._obs(), justified_reward, True, info
 
         # ── Round finished without a deal ────────────────────────────
         if self.provider.is_final_round(self.round_num):

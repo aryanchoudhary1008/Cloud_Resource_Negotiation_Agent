@@ -32,9 +32,9 @@ from agents.provider_agent import provider_names, tier_names
 PROVIDERS = provider_names()
 TIERS     = tier_names()
 
-# Bump this whenever the encoding OR the reward function changes (v4: price_gap_to_floor feature).
+# Bump this whenever the encoding OR the reward function changes (v5: explicit affordability flag in tabular state).
 # Saved models carry the version and are ignored if it does not match (old q_table.pkl/dqn_model.pt are stale).
-STATE_VERSION = 4
+STATE_VERSION = 5
 
 # Dimension of the DQN input vector:
 #   provider one-hot + tier one-hot + 8 continuous features
@@ -69,10 +69,11 @@ def encode_tabular(obs):
     Encode an observation as a hashable tuple for the Q-table.
 
     Returns:
-        (provider, tier, price_bin, budget_bin, gap_bin, patience_bin)
-        3 x 3 x 6 x 5 x 5 x 4 = 5,400 possible states.
+        (provider, tier, price_bin, budget_bin, gap_bin, patience_bin, is_affordable)
+        3 x 3 x 6 x 5 x 5 x 4 x 2 = 10,800 possible states.
     """
     price_bin = int(np.clip((obs["offer_ratio"] - 0.5) / 0.1, 0, PRICE_BINS - 1))
+    is_affordable = int(obs["offer"] <= obs["budget"]) if ("offer" in obs and "budget" in obs) else int(obs.get("offer_ratio", 1.0) <= obs.get("budget_ratio", 0.0))
     return (
         obs["provider_idx"],
         obs["tier_idx"],
@@ -80,6 +81,7 @@ def encode_tabular(obs):
         _bin(obs["budget_ratio"], BUDGET_EDGES),
         _bin(obs["gap"], GAP_EDGES),
         _patience_bin(obs["remaining"]),
+        is_affordable,
     )
 
 

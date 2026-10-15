@@ -103,11 +103,22 @@ class DQNAgent:
 
     # ── Action selection ─────────────────────────────────────────────
 
-    def choose_action(self, state):
+    def choose_action(self, state, legal_actions=None):
         """ε-greedy over the network's Q-values. `state` is a float vector."""
+        if legal_actions is None:
+            legal_actions = list(range(self.NUM_ACTIONS))
+        elif not isinstance(legal_actions, (list, tuple)):
+            legal_actions = list(legal_actions)
+
+        if not legal_actions:
+            legal_actions = list(range(self.NUM_ACTIONS))
+
         if random.random() < self.epsilon:
-            return random.randrange(self.NUM_ACTIONS)
-        return int(np.argmax(self.q_values(state)))
+            return int(random.choice(legal_actions))
+
+        q_vals = self.q_values(state)
+        best_action = max(legal_actions, key=lambda a: q_vals[a])
+        return int(best_action)
 
     def q_values(self, state):
         with torch.no_grad():

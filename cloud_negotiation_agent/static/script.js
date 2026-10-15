@@ -341,13 +341,22 @@ async function handleTrain() {
     document.getElementById("train-results").classList.remove("hidden");
 
     document.getElementById("t-episodes").textContent = data.episodes_trained.toLocaleString();
-    document.getElementById("t-success").textContent  = `${data.success_rate}%`;
-    document.getElementById("t-reward").textContent   = data.avg_reward.toFixed(3);
+    if (document.getElementById("t-total-episodes")) {
+      document.getElementById("t-total-episodes").textContent = data.total_episodes.toLocaleString();
+    }
+    if (document.getElementById("t-train-success")) {
+      document.getElementById("t-train-success").textContent = `${data.training_success_rate ?? data.success_rate}%`;
+    }
+    document.getElementById("t-success").textContent  = `${data.eval_success_rate ?? data.success_rate}%`;
+    if (document.getElementById("t-feas-success")) {
+      document.getElementById("t-feas-success").textContent = `${data.eval_feasible_success_rate ?? "—"}%`;
+    }
+    document.getElementById("t-reward").textContent   = (data.eval_avg_reward ?? data.avg_reward).toFixed(3);
     document.getElementById("t-states").textContent   = data.knowledge_size.toLocaleString();
     document.getElementById("t-states-label").textContent = data.knowledge_label;
     document.getElementById("t-saved-msg").textContent =
       `${algorithm === "dqn" ? "DQN model saved to dqn_model.pt" : "Q-table saved to q_table.pkl"} ` +
-      `(${data.total_episodes.toLocaleString()} total episodes, ${data.seconds}s) and reloaded.`;
+      `(${data.total_episodes.toLocaleString()} cumulative episodes, ${data.seconds}s).`;
     loadConfig();
     document.getElementById("t-epsilon").textContent  = data.current_epsilon.toFixed(4);
 

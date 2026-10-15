@@ -89,7 +89,8 @@ def test_bad_inputs():
 def test_tabular_encoding_hashable_and_bounded():
     obs = env("GCP").reset("GCP", "Large", 50, 500)
     key = encode_tabular(obs); hash(key)
-    assert len(key) == 6 and key[0] == 1 and key[1] == 2
+    assert len(key) == 7 and key[0] == 1 and key[1] == 2
+    assert key[6] in (0, 1)
 
 def test_vector_encoding_shape_and_range():
     v = encode_vector(env("Azure").reset("Azure", "Small", 1000, 50))
@@ -109,7 +110,7 @@ def test_bellman_update():
 
 def test_q_save_load_and_stale_version(tmp_path):
     import pickle
-    a = QLearningAgent(); a.update((0,)*6, 2, 5.0, (0,)*6, True)
+    a = QLearningAgent(); a.update((0,)*7, 2, 5.0, (0,)*7, True)
     f = str(tmp_path / "q.pkl"); a.save(f)
     b = QLearningAgent(); assert b.load(f) and len(b.q_table) == 1
     pickle.dump({"q_table": {(1, 2, 3, 4, 0): np.zeros(4)}}, open(f, "wb"))   # old format
