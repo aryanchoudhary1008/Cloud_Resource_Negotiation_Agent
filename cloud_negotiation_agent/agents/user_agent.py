@@ -124,10 +124,12 @@ class UserAgent:
     def legal_actions(self, obs):
         """
         Return the list of valid actions for observation `obs`.
-        Enforces hard budget constraint: ACCEPT (action 2) is illegal if offer > budget.
+        Enforces the hard budget constraint and excludes DOWNGRADE at the smallest tier.
         """
-        from rl.environment import NUM_ACTIONS, ACCEPT
+        from rl.environment import NUM_ACTIONS, DOWNGRADE, ACCEPT
         actions = list(range(NUM_ACTIONS))
+        if obs.get("tier_idx") == 0:
+            actions.remove(DOWNGRADE)
         if obs["offer"] > obs["budget"]:
             actions.remove(ACCEPT)
         return actions
@@ -150,10 +152,8 @@ class UserAgent:
 
             if self.training_mode:
                 next_legals = self.legal_actions(next_obs) if not done else None
-                try:
-                    self.agent.update(state, action, reward, self.encode(next_obs), done, next_legal_actions=next_legals)
-                except TypeError:
-                    self.agent.update(state, action, reward, self.encode(next_obs), done)
+                self.agent.update(state, action, reward, self.encode(next_obs), done,
+                                  next_legal_actions=next_legals)
             obs = next_obs
 
         return NegotiationResult(self.env, self.algorithm)

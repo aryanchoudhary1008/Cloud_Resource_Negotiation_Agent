@@ -53,21 +53,30 @@ class QNetwork(nn.Module):
 class ReplayBuffer:
     """Fixed-size FIFO store of (s, a, r, s', done) transitions."""
 
-    def __init__(self, capacity=20000):
+    def __init__(self, capacity=20000, n_actions=4):
         self.buffer = deque(maxlen=capacity)
+        self.n_actions = n_actions
 
-    def push(self, state, action, reward, next_state, done):
-        self.buffer.append((state, action, reward, next_state, float(done)))
+    def push(self, state, action, reward, next_state, done, next_legal_actions=None):
+        action_mask = np.ones(self.n_actions, dtype=np.bool_)
+        if next_legal_actions is not None:
+            actions = list(next_legal_actions)
+            if not actions or any(action not in range(self.n_actions) for action in actions):
+                raise ValueError("next_legal_actions must contain valid action indices")
+            action_mask[:] = False
+            action_mask[actions] = True
+        self.buffer.append((state, action, reward, next_state, float(done), action_mask))
 
     def sample(self, batch_size):
         batch = random.sample(self.buffer, batch_size)
-        s, a, r, s2, d = zip(*batch)
+        s, a, r, s2, d, legal = zip(*batch)
         return (
             torch.as_tensor(np.array(s),  dtype=torch.float32),
             torch.as_tensor(a,            dtype=torch.int64).unsqueeze(1),
             torch.as_tensor(r,            dtype=torch.float32).unsqueeze(1),
             torch.as_tensor(np.array(s2), dtype=torch.float32),
             torch.as_tensor(d,            dtype=torch.float32).unsqueeze(1),
+            torch.as_tensor(np.array(legal), dtype=torch.bool),
         )
 
     def __len__(self):
@@ -93,7 +102,7 @@ class DQNAgent:
         self.target_net.eval()
 
         self.optimizer = torch.optim.Adam(self.policy_net.parameters(), lr=lr)
-        self.buffer    = ReplayBuffer(buffer_size)
+        self.buffer    = ReplayBuffer(buffer_size, self.NUM_ACTIONS)
 
         self.learn_steps      = 0
         self.last_loss        = None
@@ -127,19 +136,22 @@ class DQNAgent:
 
     # ── Learning ─────────────────────────────────────────────────────
 
-    def update(self, state, action, reward, next_state, done=False):
+    def update(self, state, action, reward, next_state, done=False,
+               next_legal_actions=None):
         """Store the transition, then do one gradient step once the buffer is warm."""
-        self.buffer.push(state, action, reward, next_state, done)
+        self.buffer.push(state, action, reward, next_state, done, next_legal_actions)
         if len(self.buffer) < self.batch_size:
             return None
         return self._learn()
 
     def _learn(self):
-        s, a, r, s2, d = self.buffer.sample(self.batch_size)
+        s, a, r, s2, d, next_legal_mask = self.buffer.sample(self.batch_size)
 
         q_sa = self.policy_net(s).gather(1, a)                      # Q(s, a; θ)
         with torch.no_grad():
-            q_next = self.target_net(s2).max(1, keepdim=True)[0]    # max_a' Q_target
+            next_values = self.target_net(s2)
+            next_values.masked_fill_(~next_legal_mask, -torch.inf)
+            q_next = next_values.max(1, keepdim=True)[0]             # max legal Q_target
             target = r + self.gamma * q_next * (1.0 - d)
 
         loss = F.smooth_l1_loss(q_sa, target)
@@ -210,4 +222,3 @@ class DQNAgent:
         print(f"[DQN-Agent] Loaded model from '{path}' "
               f"(trained for {self.episode_count} episodes, eps={self.epsilon:.4f})")
         return True
-

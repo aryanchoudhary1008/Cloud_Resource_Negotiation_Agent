@@ -7,6 +7,7 @@ Regression tests for the three improvements:
 3. Justified walk-away reward logic vs unnecessary walk-away penalty.
 """
 
+import numpy as np
 import pytest
 from rl.environment import (
     NegotiationEnv,
@@ -69,17 +70,21 @@ def test_affordability_state_separation():
 
 def test_hard_budget_constraint_action_masking():
     """
-    UserAgent.legal_actions must exclude ACCEPT (action 2) whenever offer > budget.
+    UserAgent.legal_actions excludes ACCEPT above budget and DOWNGRADE at Small.
     """
     agent = UserAgent("qlearning", load=False)
-    obs_unaffordable = {"offer": 100.0, "budget": 80.0}
-    obs_affordable = {"offer": 80.0, "budget": 100.0}
+    obs_unaffordable = {"offer": 100.0, "budget": 80.0, "tier_idx": 1}
+    obs_affordable = {"offer": 80.0, "budget": 100.0, "tier_idx": 1}
+    obs_small = {"offer": 80.0, "budget": 100.0, "tier_idx": 0}
 
     legals_unaff = agent.legal_actions(obs_unaffordable)
     legals_aff = agent.legal_actions(obs_affordable)
+    legals_small = agent.legal_actions(obs_small)
 
     assert ACCEPT not in legals_unaff
     assert ACCEPT in legals_aff
+    assert DOWNGRADE not in legals_small
+    assert DOWNGRADE in legals_aff
 
 
 def test_agent_never_accepts_over_budget_even_with_greedy_q():
@@ -109,6 +114,50 @@ def test_agent_never_accepts_over_budget_even_with_greedy_q():
 
     assert chosen != ACCEPT
     assert chosen in legals
+
+
+def test_dqn_target_masks_unavailable_actions():
+    """
+    An unavailable action with a large target Q-value must not affect the
+    nonterminal Bellman target.
+    """
+    torch = pytest.importorskip("torch")
+    from rl.dqn_agent import DQNAgent
+    from rl.state_space import STATE_DIM
+
+    agent = DQNAgent(batch_size=1, gamma=0.5)
+    state = np.zeros(STATE_DIM, dtype=np.float32)
+    with torch.no_grad():
+        for parameter in agent.policy_net.parameters():
+            parameter.zero_()
+        for parameter in agent.target_net.parameters():
+            parameter.zero_()
+        agent.target_net.net[-1].bias.copy_(torch.tensor([0.1, 0.2, 100.0, 0.3]))
+
+    agent.update(state, 0, 0.0, state, False, next_legal_actions=[0, 1, 3])
+
+    expected_target = 0.5 * 0.3
+    assert agent.last_loss == pytest.approx(0.5 * expected_target ** 2)
+
+
+def test_dqn_terminal_transition_does_not_bootstrap():
+    """Terminal replay entries use their reward without a next-state value."""
+    torch = pytest.importorskip("torch")
+    from rl.dqn_agent import DQNAgent
+    from rl.state_space import STATE_DIM
+
+    agent = DQNAgent(batch_size=1, gamma=0.5)
+    state = np.zeros(STATE_DIM, dtype=np.float32)
+    with torch.no_grad():
+        for parameter in agent.policy_net.parameters():
+            parameter.zero_()
+        for parameter in agent.target_net.parameters():
+            parameter.zero_()
+        agent.target_net.net[-1].bias.fill_(100.0)
+
+    agent.update(state, 0, 0.2, state, True)
+
+    assert agent.last_loss == pytest.approx(0.5 * 0.2 ** 2)
 
 
 def test_justified_walkaway_reward_on_impossible_scenario():
@@ -199,4 +248,3 @@ def test_api_train_metrics_distinction(client):
     assert "eval_success_rate" in d
     assert "eval_feasible_success_rate" in d
     assert "eval_avg_reward" in d
-
